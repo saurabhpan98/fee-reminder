@@ -93,10 +93,20 @@ const Icons = {
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
     </svg>
+  ),
+  Eye: ({ className = "w-4 h-4" }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+    </svg>
+  ),
+  EyeOff: ({ className = "w-4 h-4" }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858-5.908a10.016 10.016 0 012.122-.063c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m-6.837-1.353a3 3 0 11-4.243-4.243M3 3l18 18" />
+    </svg>
   )
 };
 
-// Auth Error Parser
 const getAuthErrorMessage = (errorCode) => {
   switch (errorCode) {
     case "auth/invalid-credential":
@@ -159,11 +169,16 @@ function MainDashboard() {
   const [selectedMonth, setSelectedMonth] = useState(MONTHS[new Date().getMonth()]);
   const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR.toString());
 
-  // Form Inputs
+  // Form Inputs (Structure Creation)
   const [newCoachingName, setNewCoachingName] = useState("");
+  const [newCoachingOwner, setNewCoachingOwner] = useState("");
   const [newClassName, setNewClassName] = useState("");
   const [newSubjectName, setNewSubjectName] = useState("");
+  const [newSubjectTeacher, setNewSubjectTeacher] = useState("");
   
+  // Structure Edit Modal State
+  const [structureToEdit, setStructureToEdit] = useState(null); // { id, type: 'coaching'|'class'|'subject', name, owner?, teacher? }
+
   // Student Modal State
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState(null);
@@ -182,8 +197,9 @@ function MainDashboard() {
   // Profile Modal State
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState(null);
 
-  // Deletion Confirmation Modal State
+  // Deletion Confirmation Modal States
   const [studentToDelete, setStudentToDelete] = useState(null);
+  const [structureToDelete, setStructureToDelete] = useState(null); // { id, type: 'coaching'|'class'|'subject', name }
 
   // Fee Status Modal State
   const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
@@ -229,15 +245,17 @@ function MainDashboard() {
     };
   }, [currentUser]);
 
-  // Structure Handlers
+  // Structure Creation Handlers
   const handleAddCoaching = async (e) => {
     e.preventDefault();
     if (!newCoachingName.trim()) return;
     await addDoc(collection(db, "users", currentUser.uid, "coachings"), {
       name: newCoachingName.trim(),
+      owner: newCoachingOwner.trim(),
       createdAt: serverTimestamp()
     });
     setNewCoachingName("");
+    setNewCoachingOwner("");
   };
 
   const handleAddClass = async (e) => {
@@ -256,10 +274,39 @@ function MainDashboard() {
     if (!newSubjectName.trim() || !selectedClass) return;
     await addDoc(collection(db, "users", currentUser.uid, "subjects"), {
       name: newSubjectName.trim(),
+      teacher: newSubjectTeacher.trim(),
       classId: selectedClass,
       createdAt: serverTimestamp()
     });
     setNewSubjectName("");
+    setNewSubjectTeacher("");
+  };
+
+  // Structure Edit Handler
+  const handleUpdateStructure = async (e) => {
+    e.preventDefault();
+    if (!structureToEdit || !structureToEdit.name.trim()) return;
+
+    const uid = currentUser.uid;
+    const { id, type, name, owner, teacher } = structureToEdit;
+
+    if (type === "coaching") {
+      await updateDoc(doc(db, "users", uid, "coachings", id), {
+        name: name.trim(),
+        owner: (owner || "").trim()
+      });
+    } else if (type === "class") {
+      await updateDoc(doc(db, "users", uid, "classes", id), {
+        name: name.trim()
+      });
+    } else if (type === "subject") {
+      await updateDoc(doc(db, "users", uid, "subjects", id), {
+        name: name.trim(),
+        teacher: (teacher || "").trim()
+      });
+    }
+
+    setStructureToEdit(null);
   };
 
   // Student Handlers
@@ -342,7 +389,7 @@ function MainDashboard() {
     }
   };
 
-  // Confirmed Delete Handler
+  // Confirmed Delete Handler (Students)
   const confirmDeleteStudent = async () => {
     if (!studentToDelete) return;
     await deleteDoc(doc(db, "users", currentUser.uid, "students", studentToDelete.id));
@@ -353,9 +400,17 @@ function MainDashboard() {
     setStudentToDelete(null);
   };
 
-  const handleDeleteCoaching = (id) => deleteDoc(doc(db, "users", currentUser.uid, "coachings", id));
-  const handleDeleteClass = (id) => deleteDoc(doc(db, "users", currentUser.uid, "classes", id));
-  const handleDeleteSubject = (id) => deleteDoc(doc(db, "users", currentUser.uid, "subjects", id));
+  // Confirmed Delete Handler (Structure: Coaching, Class, Subject)
+  const confirmDeleteStructure = async () => {
+    if (!structureToDelete) return;
+    const { id, type } = structureToDelete;
+    let collectionName = "coachings";
+    if (type === "class") collectionName = "classes";
+    if (type === "subject") collectionName = "subjects";
+
+    await deleteDoc(doc(db, "users", currentUser.uid, collectionName, id));
+    setStructureToDelete(null);
+  };
 
   // Fee Status Handlers
   const openFeeModal = (student) => {
@@ -408,10 +463,10 @@ function MainDashboard() {
     });
   }, [students, searchQuery, selectedCoaching, selectedClass, selectedSubject]);
 
+  // Due Reminders calculation
   const dueReminders = useMemo(() => {
     const feeKey = `${selectedYear}-${selectedMonth}`;
     return students.filter(s => {
-      if (s.status === "left") return false;
       if (isBeforeJoiningDate(s.joiningDate, selectedYear, selectedMonth)) return false;
       const feeData = s.feeStatus?.[feeKey];
       return !feeData || feeData.status !== "paid";
@@ -420,11 +475,25 @@ function MainDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50/60 text-slate-800 pb-16 antialiased">
+      {/* Dynamic Keyframes */}
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes scaleUp {
+          from { opacity: 0; transform: scale(0.96); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fade-in { animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-scale-up { animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      `}</style>
+
       {/* Header Navbar */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 shadow-2xs transition-all">
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 shadow-2xs transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-tr from-indigo-600 to-violet-600 text-white p-2.5 rounded-2xl shadow-md shadow-indigo-500/20">
+            <div className="bg-gradient-to-tr from-indigo-600 to-violet-600 text-white p-2.5 rounded-2xl shadow-md shadow-indigo-500/20 transform transition-transform hover:rotate-6">
               <Icons.GraduationCap className="w-6 h-6" />
             </div>
             <div>
@@ -436,7 +505,7 @@ function MainDashboard() {
           </div>
           <button 
             onClick={() => signOut(auth)}
-            className="group flex items-center gap-2 bg-slate-100/80 hover:bg-red-50 hover:text-red-600 text-slate-600 border border-slate-200/80 text-xs font-semibold px-3.5 py-2 rounded-xl transition-all duration-200 cursor-pointer active:scale-95"
+            className="group flex items-center gap-2 bg-slate-100/80 hover:bg-rose-50 hover:text-rose-600 text-slate-600 border border-slate-200/80 text-xs font-semibold px-3.5 py-2 rounded-xl transition-all duration-200 cursor-pointer active:scale-95"
           >
             <Icons.LogOut className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
             <span>Sign Out</span>
@@ -449,21 +518,21 @@ function MainDashboard() {
 
         {/* Reminder Alert Banner */}
         {CURRENT_DAY >= 10 && dueReminders.length > 0 && (
-          <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm shadow-amber-100/50">
+          <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm shadow-amber-100/50 animate-fade-in">
             <div className="flex items-center gap-3.5">
-              <div className="p-2 bg-amber-100 text-amber-800 rounded-xl">
+              <div className="p-2 bg-amber-100 text-amber-800 rounded-xl animate-bounce">
                 <Icons.AlertTriangle className="w-5 h-5" />
               </div>
               <div>
                 <h4 className="font-bold text-amber-950 text-sm">Fee Collection Alert (Past 10th of {selectedMonth})</h4>
                 <p className="text-xs text-amber-800/90 font-medium mt-0.5">
-                  You have <strong className="font-bold underline">{dueReminders.length}</strong> active student(s) with pending payments for {selectedMonth} {selectedYear}.
+                  You have <strong className="font-bold underline">{dueReminders.length}</strong> student(s) with pending payments for {selectedMonth} {selectedYear}.
                 </p>
               </div>
             </div>
             <button 
               onClick={() => setActiveTab("reminders")}
-              className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer text-center"
+              className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all duration-200 cursor-pointer text-center"
             >
               Review Unpaid List
             </button>
@@ -474,7 +543,7 @@ function MainDashboard() {
         <div className="flex p-1 bg-slate-200/60 rounded-2xl w-full sm:w-fit space-x-1 border border-slate-200/60">
           <button
             onClick={() => setActiveTab("students")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer ${
               activeTab === "students" 
                 ? "bg-white text-indigo-600 shadow-sm shadow-slate-200" 
                 : "text-slate-600 hover:text-slate-900"
@@ -485,7 +554,7 @@ function MainDashboard() {
           </button>
           <button
             onClick={() => setActiveTab("structure")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer ${
               activeTab === "structure" 
                 ? "bg-white text-indigo-600 shadow-sm shadow-slate-200" 
                 : "text-slate-600 hover:text-slate-900"
@@ -496,7 +565,7 @@ function MainDashboard() {
           </button>
           <button
             onClick={() => setActiveTab("reminders")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer ${
               activeTab === "reminders" 
                 ? "bg-white text-indigo-600 shadow-sm shadow-slate-200" 
                 : "text-slate-600 hover:text-slate-900"
@@ -514,7 +583,7 @@ function MainDashboard() {
 
         {/* TAB 1: REGISTER */}
         {activeTab === "students" && (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-fade-in">
             
             {/* Search & Filter Toolbar */}
             <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
@@ -530,12 +599,12 @@ function MainDashboard() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search student by name..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                   />
                   {searchQuery && (
                     <button 
                       onClick={() => setSearchQuery("")}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
                     >
                       ✕
                     </button>
@@ -544,7 +613,7 @@ function MainDashboard() {
 
                 <button
                   onClick={openAddStudentModal}
-                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-sm shadow-indigo-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-sm shadow-indigo-500/20 transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <Icons.Plus className="w-4 h-4" />
                   <span>Add New Student</span>
@@ -556,7 +625,7 @@ function MainDashboard() {
                 <select 
                   value={selectedCoaching}
                   onChange={(e) => { setSelectedCoaching(e.target.value); setSelectedClass(""); setSelectedSubject(""); }}
-                  className="bg-slate-50/80 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="bg-slate-50/80 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                 >
                   <option value="">All Coachings</option>
                   {coachings.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -565,7 +634,7 @@ function MainDashboard() {
                 <select 
                   value={selectedClass}
                   onChange={(e) => { setSelectedClass(e.target.value); setSelectedSubject(""); }}
-                  className="bg-slate-50/80 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="bg-slate-50/80 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                 >
                   <option value="">All Class Levels</option>
                   {classes
@@ -576,7 +645,7 @@ function MainDashboard() {
                 <select 
                   value={selectedSubject}
                   onChange={(e) => setSelectedSubject(e.target.value)}
-                  className="bg-slate-50/80 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="bg-slate-50/80 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-700 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                 >
                   <option value="">All Subjects</option>
                   {subjects
@@ -587,7 +656,7 @@ function MainDashboard() {
                 <select 
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="bg-indigo-50/60 border border-indigo-200/80 text-indigo-900 rounded-xl p-2.5 text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="bg-indigo-50/60 border border-indigo-200/80 text-indigo-900 rounded-xl p-2.5 text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                 >
                   {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
@@ -595,7 +664,7 @@ function MainDashboard() {
                 <select 
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(e.target.value)}
-                  className="bg-indigo-50/60 border border-indigo-200/80 text-indigo-900 rounded-xl p-2.5 text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="bg-indigo-50/60 border border-indigo-200/80 text-indigo-900 rounded-xl p-2.5 text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                 >
                   {[CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1].map((y) => (
                     <option key={y} value={y}>{y}</option>
@@ -605,7 +674,7 @@ function MainDashboard() {
             </div>
 
             {/* Student Register Table */}
-            <div className="bg-white border border-slate-200/80 rounded-3xl shadow-xs overflow-hidden">
+            <div className="bg-white border border-slate-200/80 rounded-3xl shadow-xs overflow-hidden transition-all duration-300">
               {loading ? (
                 <div className="p-12 text-center text-xs text-slate-400 font-medium">Loading student records...</div>
               ) : filteredStudents.length === 0 ? (
@@ -635,13 +704,17 @@ function MainDashboard() {
                         const feeData = s.feeStatus?.[feeKey] || {};
                         const notJoinedYet = isBeforeJoiningDate(s.joiningDate, selectedYear, selectedMonth);
                         const isLeft = s.status === "left";
+                        
+                        const amountPaid = feeData.amountPaid || 0;
+                        const remainingDue = s.monthlyFees - amountPaid;
+                        const isPaidInFull = feeData.status === "paid";
 
                         return (
-                          <tr key={s.id} className="hover:bg-slate-50/70 transition-colors">
+                          <tr key={s.id} className="hover:bg-slate-50/80 transition-colors duration-150">
                             <td className="py-4 px-5">
                               <button
                                 onClick={() => setSelectedStudentForProfile(s)}
-                                className="font-semibold text-indigo-600 hover:text-indigo-800 hover:underline text-left cursor-pointer"
+                                className="font-semibold text-indigo-600 hover:text-indigo-800 hover:underline text-left cursor-pointer transition-colors"
                               >
                                 {s.name}
                               </button>
@@ -662,9 +735,18 @@ function MainDashboard() {
                             </td>
                             <td className="py-4 px-5 text-center">
                               {isLeft ? (
-                                <span className="px-3 py-1 bg-slate-100 text-slate-400 rounded-full text-xs font-semibold">
-                                  Left Class
-                                </span>
+                                isPaidInFull ? (
+                                  <span className="px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-xs font-medium">
+                                    Left Class (Paid)
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => openFeeModal(s)}
+                                    className="px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200 cursor-pointer inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/80 active:scale-95"
+                                  >
+                                    🚫 Left Class (Due: ₹{remainingDue})
+                                  </button>
+                                )
                               ) : notJoinedYet ? (
                                 <span className="px-3 py-1 bg-slate-100 text-slate-400 rounded-full text-xs font-semibold">
                                   ⚪ Not Joined Yet
@@ -672,7 +754,7 @@ function MainDashboard() {
                               ) : (
                                 <button
                                   onClick={() => openFeeModal(s)}
-                                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 active:scale-95 ${
+                                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200 cursor-pointer inline-flex items-center gap-1.5 active:scale-95 ${
                                     feeData.status === "paid"
                                       ? "bg-emerald-100/80 text-emerald-800 hover:bg-emerald-200/80 border border-emerald-300/50"
                                       : feeData.status === "partial"
@@ -693,14 +775,14 @@ function MainDashboard() {
                               <div className="flex items-center justify-end gap-1">
                                 <button
                                   onClick={() => openEditStudentModal(s)}
-                                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors duration-150 cursor-pointer"
                                   title="Edit Student"
                                 >
                                   <Icons.Edit />
                                 </button>
                                 <button
                                   onClick={() => setStudentToDelete(s)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors duration-150 cursor-pointer"
                                   title="Delete Student"
                                 >
                                   <Icons.Trash />
@@ -720,30 +802,58 @@ function MainDashboard() {
 
         {/* TAB 2: STRUCTURE */}
         {activeTab === "structure" && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
+            
+            {/* 1. Coaching Section */}
             <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
               <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                 <Icons.Building className="w-4 h-4 text-indigo-600" />
-                <span>1. Tuition / Coaching Name</span>
+                <span>1. Tuition / Coaching</span>
               </h3>
-              <form onSubmit={handleAddCoaching} className="flex gap-2">
+              <form onSubmit={handleAddCoaching} className="space-y-2">
                 <input 
-                  type="text" placeholder="e.g. Apex Academy" value={newCoachingName}
+                  type="text" required placeholder="Coaching Name (e.g. Apex Academy)" value={newCoachingName}
                   onChange={(e) => setNewCoachingName(e.target.value)}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                 />
-                <button className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3.5 py-2.5 rounded-xl font-medium cursor-pointer">Add</button>
+                <input 
+                  type="text" placeholder="Owner Name (e.g. Dr. R.K. Gupta)" value={newCoachingOwner}
+                  onChange={(e) => setNewCoachingOwner(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                />
+                <button className="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs py-2 rounded-xl font-medium cursor-pointer transition-all duration-200">
+                  Add Coaching
+                </button>
               </form>
               <ul className="space-y-2 max-h-60 overflow-y-auto">
                 {coachings.map(c => (
-                  <li key={c.id} className="flex justify-between items-center p-3 bg-slate-50/80 rounded-xl text-xs font-semibold text-slate-700 border border-slate-100">
-                    <span>{c.name}</span>
-                    <button onClick={() => handleDeleteCoaching(c.id)} className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"><Icons.Trash /></button>
+                  <li key={c.id} className="flex justify-between items-center p-3 bg-slate-50/80 rounded-xl text-xs border border-slate-100 hover:border-slate-200 transition-colors">
+                    <div>
+                      <div className="font-semibold text-slate-800">{c.name}</div>
+                      {c.owner && <div className="text-3xs text-slate-400 font-medium">Owner: {c.owner}</div>}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={() => setStructureToEdit({ id: c.id, type: "coaching", name: c.name, owner: c.owner || "" })} 
+                        className="text-slate-400 hover:text-indigo-600 p-1 cursor-pointer transition-colors"
+                        title="Edit Coaching"
+                      >
+                        <Icons.Edit />
+                      </button>
+                      <button 
+                        onClick={() => setStructureToDelete({ id: c.id, type: "coaching", name: c.name })} 
+                        className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer transition-colors"
+                        title="Delete Coaching"
+                      >
+                        <Icons.Trash />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
             </div>
 
+            {/* 2. Class Level Section */}
             <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
               <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                 <Icons.Users className="w-4 h-4 text-indigo-600" />
@@ -751,7 +861,7 @@ function MainDashboard() {
               </h3>
               <select 
                 value={selectedCoaching} onChange={(e) => setSelectedCoaching(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
               >
                 <option value="">Select Coaching First</option>
                 {coachings.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -760,20 +870,36 @@ function MainDashboard() {
                 <input 
                   type="text" placeholder="e.g. 11th, 12th" value={newClassName}
                   onChange={(e) => setNewClassName(e.target.value)} disabled={!selectedCoaching}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs disabled:opacity-50"
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs disabled:opacity-50 transition-all duration-200"
                 />
-                <button disabled={!selectedCoaching} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3.5 py-2.5 rounded-xl font-medium disabled:opacity-50 cursor-pointer">Add</button>
+                <button disabled={!selectedCoaching} className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs px-3.5 py-2.5 rounded-xl font-medium disabled:opacity-50 cursor-pointer transition-all duration-200">Add</button>
               </form>
               <ul className="space-y-2 max-h-60 overflow-y-auto">
                 {classes.filter(cl => cl.coachingId === selectedCoaching).map(cl => (
-                  <li key={cl.id} className="flex justify-between items-center p-3 bg-slate-50/80 rounded-xl text-xs font-semibold text-slate-700 border border-slate-100">
+                  <li key={cl.id} className="flex justify-between items-center p-3 bg-slate-50/80 rounded-xl text-xs font-semibold text-slate-700 border border-slate-100 hover:border-slate-200 transition-colors">
                     <span>{cl.name}</span>
-                    <button onClick={() => handleDeleteClass(cl.id)} className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"><Icons.Trash /></button>
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={() => setStructureToEdit({ id: cl.id, type: "class", name: cl.name })} 
+                        className="text-slate-400 hover:text-indigo-600 p-1 cursor-pointer transition-colors"
+                        title="Edit Class"
+                      >
+                        <Icons.Edit />
+                      </button>
+                      <button 
+                        onClick={() => setStructureToDelete({ id: cl.id, type: "class", name: cl.name })} 
+                        className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer transition-colors"
+                        title="Delete Class"
+                      >
+                        <Icons.Trash />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
             </div>
 
+            {/* 3. Subjects Section */}
             <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
               <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                 <Icons.GraduationCap className="w-4 h-4 text-indigo-600" />
@@ -781,48 +907,96 @@ function MainDashboard() {
               </h3>
               <select 
                 value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
               >
                 <option value="">Select Class Level First</option>
                 {classes.filter(cl => !selectedCoaching || cl.coachingId === selectedCoaching).map(cl => (
                   <option key={cl.id} value={cl.id}>{cl.name}</option>
                 ))}
               </select>
-              <form onSubmit={handleAddSubject} className="flex gap-2">
+              <form onSubmit={handleAddSubject} className="space-y-2">
                 <input 
-                  type="text" placeholder="e.g. Maths, Physics" value={newSubjectName}
+                  type="text" required placeholder="Subject Name (e.g. Physics)" value={newSubjectName}
                   onChange={(e) => setNewSubjectName(e.target.value)} disabled={!selectedClass}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs disabled:opacity-50"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs disabled:opacity-50 transition-all duration-200"
                 />
-                <button disabled={!selectedClass} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3.5 py-2.5 rounded-xl font-medium disabled:opacity-50 cursor-pointer">Add</button>
+                <input 
+                  type="text" placeholder="Teacher Name (e.g. Prof. Verma)" value={newSubjectTeacher}
+                  onChange={(e) => setNewSubjectTeacher(e.target.value)} disabled={!selectedClass}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs disabled:opacity-50 transition-all duration-200"
+                />
+                <button disabled={!selectedClass} className="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs py-2 rounded-xl font-medium disabled:opacity-50 cursor-pointer transition-all duration-200">
+                  Add Subject
+                </button>
               </form>
               <ul className="space-y-2 max-h-60 overflow-y-auto">
                 {subjects.filter(sb => sb.classId === selectedClass).map(sb => (
-                  <li key={sb.id} className="flex justify-between items-center p-3 bg-slate-50/80 rounded-xl text-xs font-semibold text-slate-700 border border-slate-100">
-                    <span>{sb.name}</span>
-                    <button onClick={() => handleDeleteSubject(sb.id)} className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"><Icons.Trash /></button>
+                  <li key={sb.id} className="flex justify-between items-center p-3 bg-slate-50/80 rounded-xl text-xs border border-slate-100 hover:border-slate-200 transition-colors">
+                    <div>
+                      <div className="font-semibold text-slate-800">{sb.name}</div>
+                      {sb.teacher && <div className="text-3xs text-slate-400 font-medium">Teacher: {sb.teacher}</div>}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={() => setStructureToEdit({ id: sb.id, type: "subject", name: sb.name, teacher: sb.teacher || "" })} 
+                        className="text-slate-400 hover:text-indigo-600 p-1 cursor-pointer transition-colors"
+                        title="Edit Subject"
+                      >
+                        <Icons.Edit />
+                      </button>
+                      <button 
+                        onClick={() => setStructureToDelete({ id: sb.id, type: "subject", name: sb.name })} 
+                        className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer transition-colors"
+                        title="Delete Subject"
+                      >
+                        <Icons.Trash />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
             </div>
+
           </div>
         )}
 
         {/* TAB 3: REMINDERS */}
         {activeTab === "reminders" && (
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs space-y-6 animate-fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  Unpaid / Partial Fee Summary ({selectedMonth} {selectedYear})
+                  Unpaid / Partial Fee Summary
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Automated checklist of active students with pending fees.
+                  Automated checklist of students with pending fees.
                 </p>
               </div>
-              <span className="bg-amber-100 text-amber-900 text-xs font-bold px-3 py-1.5 rounded-full">
-                {dueReminders.length} Pending
-              </span>
+
+              {/* Month & Year Selectors */}
+              <div className="flex items-center gap-2">
+                <select 
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="bg-indigo-50/60 border border-indigo-200/80 text-indigo-900 rounded-xl p-2 text-xs font-semibold focus:outline-none transition-all duration-200"
+                >
+                  {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+
+                <select 
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  className="bg-indigo-50/60 border border-indigo-200/80 text-indigo-900 rounded-xl p-2 text-xs font-semibold focus:outline-none transition-all duration-200"
+                >
+                  {[CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1].map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+
+                <span className="bg-amber-100 text-amber-900 text-xs font-bold px-3 py-1.5 rounded-full ml-1">
+                  {dueReminders.length} Pending
+                </span>
+              </div>
             </div>
 
             {dueReminders.length === 0 ? (
@@ -831,7 +1005,7 @@ function MainDashboard() {
                   <Icons.Check className="w-6 h-6" />
                 </div>
                 <p className="text-sm font-semibold text-slate-700">All caught up!</p>
-                <p className="text-xs text-slate-400">All active enrolled students have cleared their fees for {selectedMonth} {selectedYear}.</p>
+                <p className="text-xs text-slate-400">All students have cleared their fees for {selectedMonth} {selectedYear}.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -840,30 +1014,53 @@ function MainDashboard() {
                   const feeData = s.feeStatus?.[feeKey] || {};
                   const amountPaid = feeData.amountPaid || 0;
                   const remainingDue = s.monthlyFees - amountPaid;
+                  const isLeft = s.status === "left";
 
                   return (
-                    <div key={s.id} className="p-5 border border-amber-200/80 bg-gradient-to-b from-amber-50/40 to-orange-50/20 rounded-2xl space-y-3 shadow-2xs">
-                      <div className="flex justify-between items-start">
-                        <button 
-                          onClick={() => setSelectedStudentForProfile(s)}
-                          className="font-bold text-slate-900 text-sm hover:text-indigo-600 hover:underline cursor-pointer text-left"
-                        >
-                          {s.name}
-                        </button>
-                        <div className="text-right">
-                          <div className="text-xs font-extrabold text-rose-600">Due: ₹{remainingDue}</div>
-                          <div className="text-3xs text-slate-400 font-medium">Total: ₹{s.monthlyFees}</div>
+                    <div 
+                      key={s.id} 
+                      className={`p-5 border rounded-2xl shadow-2xs flex flex-col justify-between h-full space-y-4 transition-all duration-200 hover:scale-[1.01] ${
+                        isLeft 
+                          ? "border-rose-200/80 bg-gradient-to-b from-rose-50/40 to-slate-50/20" 
+                          : "border-amber-200/80 bg-gradient-to-b from-amber-50/40 to-orange-50/20"
+                      }`}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <button 
+                              onClick={() => setSelectedStudentForProfile(s)}
+                              className="font-bold text-slate-900 text-sm hover:text-indigo-600 hover:underline cursor-pointer text-left block transition-colors"
+                            >
+                              {s.name}
+                            </button>
+                            {isLeft && (
+                              <span className="inline-block mt-1 text-3xs font-bold text-rose-600 bg-rose-100/80 border border-rose-200 px-2 py-0.5 rounded-full">
+                                🚫 Left Class
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-right">
+                            <div className="text-xs font-extrabold text-rose-600">Due: ₹{remainingDue}</div>
+                            <div className="text-3xs text-slate-400 font-medium">Total: ₹{s.monthlyFees}</div>
+                          </div>
                         </div>
-                      </div>
-                      <p className="text-xs text-slate-600 flex items-center gap-1.5"><Icons.Phone /> {s.phone || "No phone"}</p>
-                      {feeData.remark && (
-                        <p className="text-2xs text-amber-900 italic bg-amber-100/60 p-2 rounded-xl border border-amber-200/50">
-                          Remark: {feeData.remark}
+
+                        <p className="text-xs text-slate-600 flex items-center gap-1.5">
+                          <Icons.Phone /> {s.phone || "No phone"}
                         </p>
-                      )}
+
+                        {feeData.remark && (
+                          <p className="text-2xs text-amber-900 italic bg-amber-100/60 p-2 rounded-xl border border-amber-200/50">
+                            Remark: {feeData.remark}
+                          </p>
+                        )}
+                      </div>
+
                       <button
                         onClick={() => openFeeModal(s)}
-                        className="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold py-2 rounded-xl shadow-xs transition-all cursor-pointer"
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-semibold py-2 rounded-xl shadow-xs transition-all duration-200 cursor-pointer mt-auto"
                       >
                         Update Fee Status
                       </button>
@@ -877,10 +1074,84 @@ function MainDashboard() {
 
       </main>
 
+      {/* EDIT STRUCTURE MODAL (COACHING, CLASS, SUBJECT) */}
+      {structureToEdit && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-sm w-full p-6 space-y-4 animate-scale-up">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-slate-900 capitalize">
+                Edit {structureToEdit.type}
+              </h3>
+              <button onClick={() => setStructureToEdit(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors">
+                <Icons.X />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateStructure} className="space-y-3">
+              <div>
+                <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  {structureToEdit.type} Name
+                </label>
+                <input 
+                  type="text" required
+                  value={structureToEdit.name}
+                  onChange={(e) => setStructureToEdit({ ...structureToEdit, name: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                />
+              </div>
+
+              {structureToEdit.type === "coaching" && (
+                <div>
+                  <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Owner Name
+                  </label>
+                  <input 
+                    type="text"
+                    value={structureToEdit.owner || ""}
+                    onChange={(e) => setStructureToEdit({ ...structureToEdit, owner: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                  />
+                </div>
+              )}
+
+              {structureToEdit.type === "subject" && (
+                <div>
+                  <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Teacher Name
+                  </label>
+                  <input 
+                    type="text"
+                    value={structureToEdit.teacher || ""}
+                    onChange={(e) => setStructureToEdit({ ...structureToEdit, teacher: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                  />
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button 
+                  type="button"
+                  onClick={() => setStructureToEdit(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-xl font-semibold cursor-pointer transition-colors duration-150"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs rounded-xl font-semibold shadow-xs cursor-pointer transition-all duration-150"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* STUDENT PROFILE MODAL WITH EDIT OPTION */}
       {selectedStudentForProfile && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-lg w-full p-6 space-y-5">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-lg w-full p-6 space-y-5 animate-scale-up">
             
             {/* Header */}
             <div className="flex justify-between items-start border-b border-slate-100 pb-4">
@@ -895,7 +1166,7 @@ function MainDashboard() {
                 </div>
                 <p className="text-xs text-slate-400 font-medium mt-0.5">Joined: {selectedStudentForProfile.joiningDate || "N/A"}</p>
               </div>
-              <button onClick={() => setSelectedStudentForProfile(null)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"><Icons.X /></button>
+              <button onClick={() => setSelectedStudentForProfile(null)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"><Icons.X /></button>
             </div>
 
             {/* Info Grid */}
@@ -952,14 +1223,14 @@ function MainDashboard() {
                     setSelectedStudentForProfile(null);
                     openEditStudentModal(studentToEdit);
                   }}
-                  className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold px-3.5 py-2 rounded-xl transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold px-3.5 py-2 rounded-xl transition-all duration-200 cursor-pointer active:scale-95"
                 >
                   <Icons.Edit className="w-3.5 h-3.5" />
                   <span>Edit Profile</span>
                 </button>
                 <button 
                   onClick={() => setStudentToDelete(selectedStudentForProfile)}
-                  className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold px-3 py-2 rounded-xl transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold px-3 py-2 rounded-xl transition-all duration-200 cursor-pointer active:scale-95"
                 >
                   <Icons.Trash className="w-3.5 h-3.5" />
                   <span>Delete</span>
@@ -968,9 +1239,9 @@ function MainDashboard() {
 
               <button 
                 onClick={() => handleToggleEnrollmentStatus(selectedStudentForProfile.id, selectedStudentForProfile.status)}
-                className={`text-xs font-semibold px-3 py-2 rounded-xl transition-all cursor-pointer ${
+                className={`text-xs font-semibold px-3 py-2 rounded-xl transition-all duration-200 cursor-pointer active:scale-95 ${
                   selectedStudentForProfile.status === "left"
-                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
                     : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                 }`}
               >
@@ -982,10 +1253,10 @@ function MainDashboard() {
         </div>
       )}
 
-      {/* CONFIRM DELETION MODAL */}
+      {/* CONFIRM DELETION MODAL (STUDENT) */}
       {studentToDelete && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-sm w-full p-6 space-y-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-sm w-full p-6 space-y-4 animate-scale-up">
             <div className="flex items-center gap-3 text-rose-600">
               <div className="p-3 bg-rose-100 rounded-2xl">
                 <Icons.AlertTriangle className="w-6 h-6" />
@@ -1000,13 +1271,48 @@ function MainDashboard() {
             <div className="pt-2 flex justify-end gap-2">
               <button 
                 onClick={() => setStudentToDelete(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl cursor-pointer"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl cursor-pointer transition-colors duration-150"
               >
                 Cancel
               </button>
               <button 
                 onClick={confirmDeleteStudent}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs cursor-pointer"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs cursor-pointer transition-all duration-150 active:scale-95"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETION MODAL (STRUCTURE: COACHING, CLASS, SUBJECT) */}
+      {structureToDelete && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-sm w-full p-6 space-y-4 animate-scale-up">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-100 rounded-2xl">
+                <Icons.AlertTriangle className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-slate-900 text-base capitalize">
+                Delete {structureToDelete.type}?
+              </h3>
+            </div>
+            
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Are you sure you want to permanently delete <strong>"{structureToDelete.name}"</strong>?
+            </p>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button 
+                onClick={() => setStructureToDelete(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl cursor-pointer transition-colors duration-150"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmDeleteStructure}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs cursor-pointer transition-all duration-150 active:scale-95"
               >
                 Confirm Delete
               </button>
@@ -1017,13 +1323,13 @@ function MainDashboard() {
 
       {/* ADD / EDIT STUDENT MODAL */}
       {isStudentModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-md w-full p-6 space-y-4 animate-scale-up">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h3 className="font-bold text-slate-900">
                 {editingStudentId ? "Edit Student Details" : "Add New Student"}
               </h3>
-              <button onClick={() => setIsStudentModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><Icons.X /></button>
+              <button onClick={() => setIsStudentModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"><Icons.X /></button>
             </div>
 
             <form onSubmit={handleSaveStudent} className="space-y-3">
@@ -1033,7 +1339,7 @@ function MainDashboard() {
                   required
                   value={studentFormData.coachingId}
                   onChange={(e) => setStudentFormData({ ...studentFormData, coachingId: e.target.value, classId: "", subjectId: "" })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                 >
                   <option value="">Select Coaching</option>
                   {coachings.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -1047,7 +1353,7 @@ function MainDashboard() {
                     required
                     value={studentFormData.classId}
                     onChange={(e) => setStudentFormData({ ...studentFormData, classId: e.target.value, subjectId: "" })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                   >
                     <option value="">Select Class</option>
                     {classes.filter(cl => cl.coachingId === studentFormData.coachingId).map(cl => (
@@ -1061,7 +1367,7 @@ function MainDashboard() {
                     required
                     value={studentFormData.subjectId}
                     onChange={(e) => setStudentFormData({ ...studentFormData, subjectId: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                   >
                     <option value="">Select Subject</option>
                     {subjects.filter(sb => sb.classId === studentFormData.classId).map(sb => (
@@ -1078,7 +1384,7 @@ function MainDashboard() {
                   placeholder="Rahul Sharma"
                   value={studentFormData.name}
                   onChange={(e) => setStudentFormData({ ...studentFormData, name: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                 />
               </div>
 
@@ -1090,7 +1396,7 @@ function MainDashboard() {
                     placeholder="+91 9876543210"
                     value={studentFormData.phone}
                     onChange={(e) => setStudentFormData({ ...studentFormData, phone: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                   />
                 </div>
                 <div>
@@ -1100,7 +1406,7 @@ function MainDashboard() {
                     placeholder="1500"
                     value={studentFormData.monthlyFees}
                     onChange={(e) => setStudentFormData({ ...studentFormData, monthlyFees: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                   />
                 </div>
               </div>
@@ -1112,7 +1418,7 @@ function MainDashboard() {
                     type="date" required
                     value={studentFormData.joiningDate}
                     onChange={(e) => setStudentFormData({ ...studentFormData, joiningDate: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                   />
                 </div>
                 {editingStudentId && (
@@ -1121,7 +1427,7 @@ function MainDashboard() {
                     <select 
                       value={studentFormData.status}
                       onChange={(e) => setStudentFormData({ ...studentFormData, status: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                     >
                       <option value="enrolled">🟢 Enrolled</option>
                       <option value="left">🚫 Left Class</option>
@@ -1137,7 +1443,7 @@ function MainDashboard() {
                   placeholder="Street / Area details"
                   value={studentFormData.address}
                   onChange={(e) => setStudentFormData({ ...studentFormData, address: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                 />
               </div>
 
@@ -1145,13 +1451,13 @@ function MainDashboard() {
                 <button 
                   type="button" 
                   onClick={() => setIsStudentModalOpen(false)} 
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-xl font-semibold cursor-pointer"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-xl font-semibold cursor-pointer transition-colors duration-150"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-xl font-semibold shadow-xs cursor-pointer"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs rounded-xl font-semibold shadow-xs cursor-pointer transition-all duration-150"
                 >
                   {editingStudentId ? "Update Student" : "Save Student"}
                 </button>
@@ -1163,14 +1469,14 @@ function MainDashboard() {
 
       {/* UPDATE FEE STATUS & REMARKS MODAL */}
       {isFeeModalOpen && selectedStudentForFee && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-sm w-full p-6 space-y-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-sm w-full p-6 space-y-4 animate-scale-up">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
                 <h3 className="font-bold text-slate-900">{selectedStudentForFee.name}</h3>
                 <p className="text-3xs text-slate-400 font-medium">Fee for {selectedMonth} {selectedYear} (Total: ₹{selectedStudentForFee.monthlyFees})</p>
               </div>
-              <button onClick={() => setIsFeeModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><Icons.X /></button>
+              <button onClick={() => setIsFeeModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"><Icons.X /></button>
             </div>
 
             <form onSubmit={handleSaveFeeStatus} className="space-y-3">
@@ -1179,7 +1485,7 @@ function MainDashboard() {
                 <select 
                   value={feeFormData.status}
                   onChange={(e) => setFeeFormData({ ...feeFormData, status: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                 >
                   <option value="paid">✓ Fully Paid (₹{selectedStudentForFee.monthlyFees})</option>
                   <option value="partial">⚠️ Partial Payment</option>
@@ -1197,7 +1503,7 @@ function MainDashboard() {
                     placeholder="Enter partial amount"
                     value={feeFormData.amountPaid}
                     onChange={(e) => setFeeFormData({ ...feeFormData, amountPaid: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                   />
                   {feeFormData.amountPaid !== "" && (
                     <p className="text-3xs text-amber-600 font-bold mt-1">
@@ -1214,7 +1520,7 @@ function MainDashboard() {
                   placeholder="e.g. Paid cash, promised remaining balance next Monday"
                   value={feeFormData.remark}
                   onChange={(e) => setFeeFormData({ ...feeFormData, remark: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
                 />
               </div>
 
@@ -1222,13 +1528,13 @@ function MainDashboard() {
                 <button 
                   type="button" 
                   onClick={() => setIsFeeModalOpen(false)} 
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-xl font-semibold cursor-pointer"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-xl font-semibold cursor-pointer transition-colors duration-150"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-xl font-semibold shadow-xs cursor-pointer"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs rounded-xl font-semibold shadow-xs cursor-pointer transition-all duration-150"
                 >
                   Save Record
                 </button>
@@ -1248,11 +1554,13 @@ function AuthScreen() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState("");
 
   const toggleMode = () => {
     setIsSignUp(!isSignUp);
     setAuthError("");
+    setShowPassword(false);
   };
 
   const handleAuth = async (e) => {
@@ -1302,9 +1610,9 @@ function AuthScreen() {
 
   return (
     <div className="min-h-screen bg-slate-100/60 text-slate-800 flex items-center justify-center p-4 antialiased">
-      <div className="w-full max-w-md bg-white border border-slate-200/80 rounded-3xl shadow-xl shadow-slate-200/50 p-6 sm:p-8 space-y-6">
+      <div className="w-full max-w-md bg-white border border-slate-200/80 rounded-3xl shadow-xl shadow-slate-200/50 p-6 sm:p-8 space-y-6 animate-scale-up">
         <div className="text-center">
-          <div className="inline-flex bg-gradient-to-tr from-indigo-600 to-violet-600 text-white p-3.5 rounded-2xl shadow-md shadow-indigo-500/20 mb-3">
+          <div className="inline-flex bg-gradient-to-tr from-indigo-600 to-violet-600 text-white p-3.5 rounded-2xl shadow-md shadow-indigo-500/20 mb-3 transform transition-transform hover:rotate-6">
             <Icons.GraduationCap className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
@@ -1316,7 +1624,7 @@ function AuthScreen() {
         </div>
 
         {authError && (
-          <div className="p-3 bg-rose-50 border border-rose-200/80 text-rose-700 text-xs rounded-2xl flex items-center gap-2">
+          <div className="p-3 bg-rose-50 border border-rose-200/80 text-rose-700 text-xs rounded-2xl flex items-center gap-2 animate-fade-in">
             <Icons.AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
             <div>{authError}</div>
           </div>
@@ -1333,7 +1641,7 @@ function AuthScreen() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Prof. Sharma"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
               />
             </div>
           )}
@@ -1347,7 +1655,7 @@ function AuthScreen() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="teacher@example.com"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
             />
           </div>
 
@@ -1355,18 +1663,28 @@ function AuthScreen() {
             <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">
               Password
             </label>
-            <input 
-              type="password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
-            />
+            <div className="relative">
+              <input 
+                type={showPassword ? "text" : "password"} 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <Icons.EyeOff /> : <Icons.Eye />}
+              </button>
+            </div>
           </div>
 
           <button 
             type="submit"
-            className="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-semibold py-2.5 rounded-xl shadow-sm shadow-indigo-500/20 transition-all cursor-pointer text-sm"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-semibold py-2.5 rounded-xl shadow-sm shadow-indigo-500/20 transition-all duration-200 cursor-pointer text-sm"
           >
             {isSignUp ? "Register Account" : "Sign In"}
           </button>
