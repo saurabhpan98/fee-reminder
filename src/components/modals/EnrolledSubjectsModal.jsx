@@ -14,15 +14,19 @@ export function EnrolledSubjectsModal({
   if (!selectedStudentForEnrollmentView) return null;
 
   const studentPhone = selectedStudentForEnrollmentView.phone?.trim();
-  
-  // Search & match all records with the same phone number
+  const targetSiblingIndex = selectedStudentForEnrollmentView.siblingIndex || 1;
+
+  // Search & match records with the SAME phone number AND SAME siblingIndex
   const matchedStudentRecords = useMemo(() => {
     if (!studentPhone) return [selectedStudentForEnrollmentView];
     const matches = students.filter(
-      (s) => s.phone && s.phone.trim() === studentPhone
+      (s) =>
+        s.phone &&
+        s.phone.trim() === studentPhone &&
+        (s.siblingIndex || 1) === targetSiblingIndex
     );
     return matches.length > 0 ? matches : [selectedStudentForEnrollmentView];
-  }, [students, studentPhone, selectedStudentForEnrollmentView]);
+  }, [students, studentPhone, targetSiblingIndex, selectedStudentForEnrollmentView]);
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">

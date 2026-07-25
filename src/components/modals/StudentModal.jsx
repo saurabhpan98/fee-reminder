@@ -55,6 +55,17 @@ export function StudentModal({
     );
   }, [students, studentFormData.coachingId, fullPhone, editingStudentId, localPhone]);
 
+  // Calculate highest existing siblingIndex for this phone number
+  const highestSiblingIndex = useMemo(() => {
+    if (!localPhone.trim()) return 1;
+    const samePhoneStudents = students.filter(
+      (s) => s.phone && s.phone.trim() === fullPhone.trim()
+    );
+    if (samePhoneStudents.length === 0) return 1;
+    const maxIdx = Math.max(...samePhoneStudents.map((s) => s.siblingIndex || 1));
+    return maxIdx;
+  }, [students, fullPhone, localPhone]);
+
   // Check if current form selections match an ALREADY ENROLLED Class + Subject for this phone
   const isDuplicateEnrollment = useMemo(() => {
     if (
@@ -73,7 +84,8 @@ export function StudentModal({
         s.classId === studentFormData.classId &&
         s.subjectId === studentFormData.subjectId &&
         s.phone &&
-        s.phone.trim() === fullPhone.trim()
+        s.phone.trim() === fullPhone.trim() &&
+        (s.siblingIndex || 1) === (studentFormData.siblingIndex || 1)
     );
   }, [students, studentFormData, fullPhone, editingStudentId, localPhone, isSibling]);
 
@@ -83,7 +95,11 @@ export function StudentModal({
     setCountryCode(code);
     setLocalPhone(number);
     const updatedFullPhone = number.trim() ? `${code} ${number.trim()}` : "";
-    setStudentFormData((prev) => ({ ...prev, phone: updatedFullPhone }));
+    setStudentFormData((prev) => ({ 
+      ...prev, 
+      phone: updatedFullPhone,
+      siblingIndex: prev.siblingIndex || 1
+    }));
     setAutofilledStudentId(null);
     setIsSibling(false);
   };
@@ -94,9 +110,28 @@ export function StudentModal({
       name: existingStudent.name || "",
       address: existingStudent.address || "",
       monthlyFees: existingStudent.monthlyFees || "",
-      joiningDate: existingStudent.joiningDate || new Date().toISOString().split("T")[0]
+      joiningDate: existingStudent.joiningDate || new Date().toISOString().split("T")[0],
+      siblingIndex: existingStudent.siblingIndex || 1 // Keep same sibling ID for same person
     }));
     setAutofilledStudentId(existingStudent.id);
+    setIsSibling(false);
+  };
+
+  const handleSiblingToggle = (checked) => {
+    setIsSibling(checked);
+    if (checked) {
+      // Assign new sibling index
+      setStudentFormData((prev) => ({
+        ...prev,
+        siblingIndex: highestSiblingIndex + 1
+      }));
+    } else {
+      // Reset back to siblingIndex 1 if un-checked
+      setStudentFormData((prev) => ({
+        ...prev,
+        siblingIndex: 1
+      }));
+    }
   };
 
   const onSubmit = (e) => {
@@ -198,7 +233,7 @@ export function StudentModal({
                 <span>Existing Student(s) Found ({existingMatchesInCoaching.length})</span>
               </div>
               <p className="text-3xs text-amber-800 leading-relaxed font-medium">
-                Student(s) with this phone number are already registered in this coaching center. Choose one to autofill their profile for enrolling in a new class/subject:
+                Student(s) with this phone number are already registered. Choose one to autofill their profile for enrolling in a new class/subject:
               </p>
 
               <div className="space-y-1.5 pt-1 max-h-36 overflow-y-auto pr-1">
@@ -262,7 +297,7 @@ export function StudentModal({
                 <input 
                   type="checkbox"
                   checked={isSibling}
-                  onChange={(e) => setIsSibling(e.target.checked)}
+                  onChange={(e) => handleSiblingToggle(e.target.checked)}
                   className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
                 />
                 <span>Are you adding a sibling?</span>

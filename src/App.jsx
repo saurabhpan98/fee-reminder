@@ -54,7 +54,7 @@ function MainDashboard() {
   const [studentFormData, setStudentFormData] = useState({
     name: "", phone: "", address: "", monthlyFees: "",
     joiningDate: new Date().toISOString().split("T")[0],
-    status: "enrolled", coachingId: "", classId: "", subjectId: ""
+    status: "enrolled", coachingId: "", classId: "", subjectId: "", siblingIndex: 1
   });
 
   // Profile Modal & Enrolled Subjects Modal State
@@ -167,7 +167,8 @@ function MainDashboard() {
     setStudentFormData({
       name: "", phone: "", address: "", monthlyFees: "",
       joiningDate: new Date().toISOString().split("T")[0],
-      status: "enrolled", coachingId: selectedCoaching || "", classId: selectedClass || "", subjectId: selectedSubject || ""
+      status: "enrolled", coachingId: selectedCoaching || "", classId: selectedClass || "", subjectId: selectedSubject || "",
+      siblingIndex: 1
     });
     setIsStudentModalOpen(true);
   };
@@ -177,26 +178,28 @@ function MainDashboard() {
     setStudentFormData({
       name: student.name || "", phone: student.phone || "", address: student.address || "",
       monthlyFees: student.monthlyFees || "", joiningDate: student.joiningDate || new Date().toISOString().split("T")[0],
-      status: student.status || "enrolled", coachingId: student.coachingId || "", classId: student.classId || "", subjectId: student.subjectId || ""
+      status: student.status || "enrolled", coachingId: student.coachingId || "", classId: student.classId || "", subjectId: student.subjectId || "",
+      siblingIndex: student.siblingIndex || 1
     });
     setIsStudentModalOpen(true);
   };
 
   const handleSaveStudent = async (e) => {
     e.preventDefault();
-    const { name, phone, address, monthlyFees, joiningDate, status, coachingId, classId, subjectId } = studentFormData;
+    const { name, phone, address, monthlyFees, joiningDate, status, coachingId, classId, subjectId, siblingIndex } = studentFormData;
     if (!name || !monthlyFees || !coachingId || !classId || !subjectId || !joiningDate) return;
 
     if (editingStudentId) {
       const studentRef = doc(db, "users", currentUser.uid, "students", editingStudentId);
       await updateDoc(studentRef, {
         name: name.trim(), phone: phone.trim(), address: address.trim(), monthlyFees: Number(monthlyFees),
-        joiningDate, status, coachingId, classId, subjectId
+        joiningDate, status, coachingId, classId, subjectId, siblingIndex: siblingIndex || 1
       });
     } else {
       await addDoc(collection(db, "users", currentUser.uid, "students"), {
         name: name.trim(), phone: phone.trim(), address: address.trim(), monthlyFees: Number(monthlyFees),
-        joiningDate, status: "enrolled", coachingId, classId, subjectId, feeStatus: {}, createdAt: serverTimestamp()
+        joiningDate, status: "enrolled", coachingId, classId, subjectId, siblingIndex: siblingIndex || 1,
+        feeStatus: {}, createdAt: serverTimestamp()
       });
     }
 
