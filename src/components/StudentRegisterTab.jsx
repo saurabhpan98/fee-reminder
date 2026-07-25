@@ -12,8 +12,8 @@ export function StudentRegisterTab({
   selectedMonth, setSelectedMonth,
   selectedYear, setSelectedYear,
   loading, filteredStudents,
-  setSelectedStudentForProfile, openFeeModal, openEditStudentModal, setStudentToDelete,
-  setSelectedStudentForEnrollmentView // Trigger for new Modal
+  setSelectedStudentForProfile, openFeeModal,
+  setSelectedStudentForEnrollmentView
 }) {
   return (
     <div className="space-y-6 animate-fade-in">
@@ -115,11 +115,11 @@ export function StudentRegisterTab({
               <thead className="bg-slate-50/80 border-b border-slate-200/80 text-slate-400 uppercase tracking-wider text-3xs font-bold">
                 <tr>
                   <th className="py-3.5 px-5">Student Details</th>
+                  <th className="py-3.5 px-5">Class / Subject</th>
                   <th className="py-3.5 px-5">Enrollment</th>
                   <th className="py-3.5 px-5">Monthly Fee</th>
                   <th className="py-3.5 px-5 text-center">{selectedMonth} {selectedYear} Status</th>
-                  <th className="py-3.5 px-5">Remark</th>
-                  <th className="py-3.5 px-5 text-right">Actions</th>
+                  <th className="py-3.5 px-5 text-right">Remark</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -131,6 +131,10 @@ export function StudentRegisterTab({
                   const amountPaid = feeData.amountPaid || 0;
                   const remainingDue = s.monthlyFees - amountPaid;
                   const isPaidInFull = feeData.status === "paid";
+
+                  // Resolve Class and Subject Names
+                  const classObj = classes.find((cl) => cl.id === s.classId);
+                  const subjectObj = subjects.find((sb) => sb.id === s.subjectId);
 
                   return (
                     <tr key={s.id} className="hover:bg-slate-50/80 transition-colors duration-150">
@@ -147,6 +151,13 @@ export function StudentRegisterTab({
                           </span>
                         </div>
                       </td>
+                      
+                      {/* NEW: Class / Subject Column */}
+                      <td className="py-4 px-5 text-xs">
+                        <div className="font-bold text-slate-800">{subjectObj?.name || "N/A"}</div>
+                        <div className="text-3xs text-slate-500 font-medium">Class: {classObj?.name || "N/A"}</div>
+                      </td>
+
                       <td className="py-4 px-5">
                         <div className="flex items-center gap-2">
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-3xs font-bold ${
@@ -156,7 +167,6 @@ export function StudentRegisterTab({
                             {isLeft ? "Left Class" : "Enrolled"}
                           </span>
 
-                          {/* "View" button beside Enrolled Badge */}
                           <button
                             onClick={() => setSelectedStudentForEnrollmentView(s)}
                             className="text-3xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/60 px-2 py-0.5 rounded-full cursor-pointer transition-all active:scale-95 flex items-center gap-1"
@@ -205,26 +215,10 @@ export function StudentRegisterTab({
                           </button>
                         )}
                       </td>
-                      <td className="py-4 px-5 text-xs text-slate-500 italic max-w-xs truncate">
+
+                      {/* SHIFTED: Remark Column to Rightmost position */}
+                      <td className="py-4 px-5 text-xs text-slate-500 italic max-w-xs truncate text-right">
                         {feeData.remark || "-"}
-                      </td>
-                      <td className="py-4 px-5 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => openEditStudentModal(s)}
-                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors duration-150 cursor-pointer"
-                            title="Edit Student"
-                          >
-                            <Icons.Edit />
-                          </button>
-                          <button
-                            onClick={() => setStudentToDelete(s)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors duration-150 cursor-pointer"
-                            title="Delete Student"
-                          >
-                            <Icons.Trash />
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   );

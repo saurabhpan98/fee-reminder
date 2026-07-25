@@ -1,5 +1,5 @@
 // src/components/modals/StudentModal.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Icons } from "../Icons";
 import { COUNTRY_CODES } from "../../utils/helpers";
 
@@ -12,16 +12,21 @@ export function StudentModal({
   setStudentFormData,
   coachings,
   classes,
-  subjects
+  subjects,
+  students = []
 }) {
   const [countryCode, setCountryCode] = useState("+91");
   const [localPhone, setLocalPhone] = useState("");
+  const [autofilledStudentId, setAutofilledStudentId] = useState(null);
+  const [isSibling, setIsSibling] = useState(false);
 
   // Parse phone number into Country Code + Local Number when modal opens
   useEffect(() => {
     if (isStudentModalOpen) {
+      setAutofilledStudentId(null);
+      setIsSibling(false);
       const rawPhone = studentFormData.phone || "";
-      const matchedCode = COUNTRY_CODES.find(c => rawPhone.startsWith(c.code));
+      const matchedCode = COUNTRY_CODES.find((c) => rawPhone.startsWith(c.code));
 
       if (matchedCode) {
         setCountryCode(matchedCode.code);
@@ -31,20 +36,78 @@ export function StudentModal({
         setLocalPhone(rawPhone.trim());
       }
     }
-  }, [isStudentModalOpen, studentFormData.phone]);
+  }, [isStudentModalOpen, editingStudentId]);
+
+  const fullPhone = useMemo(() => {
+    return localPhone.trim() ? `${countryCode} ${localPhone.trim()}` : "";
+  }, [countryCode, localPhone]);
+
+  // Find existing students in the SAME coaching with the SAME phone number
+  const existingMatchesInCoaching = useMemo(() => {
+    if (editingStudentId || !studentFormData.coachingId || !localPhone.trim()) {
+      return [];
+    }
+    return students.filter(
+      (s) =>
+        s.coachingId === studentFormData.coachingId &&
+        s.phone &&
+        s.phone.trim() === fullPhone.trim()
+    );
+  }, [students, studentFormData.coachingId, fullPhone, editingStudentId, localPhone]);
+
+  // Check if current form selections match an ALREADY ENROLLED Class + Subject for this phone
+  const isDuplicateEnrollment = useMemo(() => {
+    if (
+      editingStudentId ||
+      isSibling || // If marked as a sibling, ignore duplicate block
+      !studentFormData.coachingId ||
+      !studentFormData.classId ||
+      !studentFormData.subjectId ||
+      !localPhone.trim()
+    ) {
+      return false;
+    }
+    return students.some(
+      (s) =>
+        s.coachingId === studentFormData.coachingId &&
+        s.classId === studentFormData.classId &&
+        s.subjectId === studentFormData.subjectId &&
+        s.phone &&
+        s.phone.trim() === fullPhone.trim()
+    );
+  }, [students, studentFormData, fullPhone, editingStudentId, localPhone, isSibling]);
 
   if (!isStudentModalOpen) return null;
 
   const handlePhoneChange = (code, number) => {
     setCountryCode(code);
     setLocalPhone(number);
-    const fullPhone = number.trim() ? `${code} ${number.trim()}` : "";
-    setStudentFormData(prev => ({ ...prev, phone: fullPhone }));
+    const updatedFullPhone = number.trim() ? `${code} ${number.trim()}` : "";
+    setStudentFormData((prev) => ({ ...prev, phone: updatedFullPhone }));
+    setAutofilledStudentId(null);
+    setIsSibling(false);
+  };
+
+  const handleSelectExistingStudent = (existingStudent) => {
+    setStudentFormData((prev) => ({
+      ...prev,
+      name: existingStudent.name || "",
+      address: existingStudent.address || "",
+      monthlyFees: existingStudent.monthlyFees || "",
+      joiningDate: existingStudent.joiningDate || new Date().toISOString().split("T")[0]
+    }));
+    setAutofilledStudentId(existingStudent.id);
+  };
+
+  const onSubmit = (e) => {
+    e.preventDefault();
+    if (isDuplicateEnrollment) return;
+    handleSaveStudent(e);
   };
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-md w-full p-6 space-y-4 animate-scale-up">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-md w-full p-6 space-y-4 animate-scale-up max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center border-b border-slate-100 pb-3">
           <h3 className="font-bold text-slate-900">
             {editingStudentId ? "Edit Student Details" : "Add New Student"}
@@ -57,7 +120,7 @@ export function StudentModal({
           </button>
         </div>
 
-        <form onSubmit={handleSaveStudent} className="space-y-3">
+        <form onSubmit={onSubmit} className="space-y-3">
           <div>
             <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Coaching</label>
             <select 
@@ -67,7 +130,7 @@ export function StudentModal({
               className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
             >
               <option value="">Select Coaching</option>
-              {coachings.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {coachings.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
 
@@ -81,7 +144,7 @@ export function StudentModal({
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
               >
                 <option value="">Select Class</option>
-                {classes.filter(cl => cl.coachingId === studentFormData.coachingId).map(cl => (
+                {classes.filter((cl) => cl.coachingId === studentFormData.coachingId).map((cl) => (
                   <option key={cl.id} value={cl.id}>{cl.name}</option>
                 ))}
               </select>
@@ -95,21 +158,11 @@ export function StudentModal({
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
               >
                 <option value="">Select Subject</option>
-                {subjects.filter(sb => sb.classId === studentFormData.classId).map(sb => (
+                {subjects.filter((sb) => sb.classId === studentFormData.classId).map((sb) => (
                   <option key={sb.id} value={sb.id}>{sb.name}</option>
                 ))}
               </select>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Student Full Name</label>
-            <input 
-              type="text" required placeholder="Rahul Sharma"
-              value={studentFormData.name}
-              onChange={(e) => setStudentFormData({ ...studentFormData, name: e.target.value })}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
-            />
           </div>
 
           {/* Phone Input with Country Flag Picker */}
@@ -135,6 +188,96 @@ export function StudentModal({
                 className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
               />
             </div>
+          </div>
+
+          {/* EXISTING MATCHES PROMPT */}
+          {existingMatchesInCoaching.length > 0 && (
+            <div className="p-3.5 bg-amber-50/80 border border-amber-200/90 rounded-2xl space-y-2 animate-fade-in">
+              <div className="flex items-center gap-1.5 text-amber-900 text-xs font-bold">
+                <Icons.AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Existing Student(s) Found ({existingMatchesInCoaching.length})</span>
+              </div>
+              <p className="text-3xs text-amber-800 leading-relaxed font-medium">
+                Student(s) with this phone number are already registered in this coaching center. Choose one to autofill their profile for enrolling in a new class/subject:
+              </p>
+
+              <div className="space-y-1.5 pt-1 max-h-36 overflow-y-auto pr-1">
+                {existingMatchesInCoaching.map((st) => {
+                  const classObj = classes.find((cl) => cl.id === st.classId);
+                  const subjectObj = subjects.find((sb) => sb.id === st.subjectId);
+                  const isSelected = autofilledStudentId === st.id;
+
+                  return (
+                    <div 
+                      key={st.id} 
+                      className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
+                        isSelected 
+                          ? "bg-indigo-50 border-indigo-300 text-indigo-900" 
+                          : "bg-white border-amber-200 text-slate-800"
+                      }`}
+                    >
+                      <div className="text-3xs space-y-0.5">
+                        <div className="font-bold text-xs text-slate-900">{st.name}</div>
+                        <div className="text-slate-500">
+                          Class: {classObj?.name || "N/A"} • Subject: {subjectObj?.name || "N/A"}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectExistingStudent(st)}
+                        className={`px-2.5 py-1 text-3xs font-bold rounded-lg transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-indigo-600 text-white"
+                            : "bg-amber-100 hover:bg-amber-200 text-amber-900"
+                        }`}
+                      >
+                        {isSelected ? "✓ Selected" : `Enroll ${st.name.split(" ")[0]}`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* DUPLICATE ENROLLMENT WARNING BANNER WITH SIBLING CHECKBOX */}
+          {(isDuplicateEnrollment || isSibling) && (
+            <div className={`p-3.5 border rounded-2xl space-y-2.5 animate-fade-in ${
+              isSibling 
+                ? "bg-emerald-50 border-emerald-200 text-emerald-900" 
+                : "bg-rose-50 border-rose-200 text-rose-800"
+            }`}>
+              <div className="flex items-start gap-2 text-xs font-semibold">
+                <Icons.AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${isSibling ? "text-emerald-600" : "text-rose-600"}`} />
+                <span>
+                  {isSibling 
+                    ? "Sibling enrollment enabled! You can now proceed to save." 
+                    : "A student with this phone number is already enrolled in this exact Class and Subject."}
+                </span>
+              </div>
+
+              {/* Sibling Checkbox Option */}
+              <label className="flex items-center gap-2 pt-1 border-t border-slate-200/60 cursor-pointer text-xs font-bold text-slate-800 select-none">
+                <input 
+                  type="checkbox"
+                  checked={isSibling}
+                  onChange={(e) => setIsSibling(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                />
+                <span>Are you adding a sibling?</span>
+              </label>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Student Full Name</label>
+            <input 
+              type="text" required placeholder="Rahul Sharma"
+              value={studentFormData.name}
+              onChange={(e) => setStudentFormData({ ...studentFormData, name: e.target.value })}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -192,7 +335,12 @@ export function StudentModal({
             </button>
             <button 
               type="submit" 
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs rounded-xl font-semibold shadow-xs cursor-pointer transition-all duration-150"
+              disabled={isDuplicateEnrollment}
+              className={`px-4 py-2 text-white text-xs rounded-xl font-semibold shadow-xs transition-all duration-150 ${
+                isDuplicateEnrollment 
+                  ? "bg-slate-300 cursor-not-allowed" 
+                  : "bg-indigo-600 hover:bg-indigo-700 active:scale-95 cursor-pointer"
+              }`}
             >
               {editingStudentId ? "Update Student" : "Save Student"}
             </button>

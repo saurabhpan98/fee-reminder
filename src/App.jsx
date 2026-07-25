@@ -391,7 +391,7 @@ function MainDashboard() {
             selectedYear={selectedYear} setSelectedYear={setSelectedYear}
             loading={loading} filteredStudents={filteredStudents}
             setSelectedStudentForProfile={setSelectedStudentForProfile}
-            openFeeModal={openFeeModal} openEditStudentModal={openEditStudentModal} setStudentToDelete={setStudentToDelete}
+            openFeeModal={openFeeModal}
             setSelectedStudentForEnrollmentView={setSelectedStudentForEnrollmentView}
           />
         )}
@@ -459,6 +459,7 @@ function MainDashboard() {
         coachings={coachings} 
         classes={classes} 
         subjects={subjects} 
+        students={students}
       />
       <FeeModal 
         isFeeModalOpen={isFeeModalOpen} 
