@@ -1,5 +1,5 @@
 // src/components/StudentRegisterTab.jsx
-import React from "react";
+import React, { useMemo } from "react";
 import { Icons } from "./Icons";
 import { MONTHS, CURRENT_YEAR, isBeforeJoiningDate, formatPhoneNumber } from "../utils/helpers";
 
@@ -11,10 +11,34 @@ export function StudentRegisterTab({
   selectedSubject, setSelectedSubject, subjects,
   selectedMonth, setSelectedMonth,
   selectedYear, setSelectedYear,
-  loading, filteredStudents,
+  loading, students = [],
   setSelectedStudentForProfile, openFeeModal,
   setSelectedStudentForEnrollmentView
 }) {
+  // Flatten student documents into enrollment rows
+  const flattenedRows = useMemo(() => {
+    const rows = [];
+
+    students.forEach((student) => {
+      const nameMatch = !searchQuery.trim() || student.name.toLowerCase().includes(searchQuery.toLowerCase().trim());
+      if (!nameMatch) return;
+
+      (student.enrollments || []).forEach((enr) => {
+        if (selectedCoaching && enr.coachingId !== selectedCoaching) return;
+        if (selectedClass && enr.classId !== selectedClass) return;
+        if (selectedSubject && enr.subjectId !== selectedSubject) return;
+
+        rows.push({
+          rowId: `${student.id}_${enr.enrollmentId}`,
+          studentDoc: student,
+          enrollment: enr
+        });
+      });
+    });
+
+    return rows;
+  }, [students, searchQuery, selectedCoaching, selectedClass, selectedSubject]);
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
@@ -101,13 +125,12 @@ export function StudentRegisterTab({
       <div className="bg-white border border-slate-200/80 rounded-3xl shadow-xs overflow-hidden transition-all duration-300">
         {loading ? (
           <div className="p-12 text-center text-xs text-slate-400 font-medium">Loading student records...</div>
-        ) : filteredStudents.length === 0 ? (
+        ) : flattenedRows.length === 0 ? (
           <div className="p-16 text-center space-y-2">
             <div className="p-3 bg-slate-100 rounded-2xl w-fit mx-auto text-slate-400">
               <Icons.Users className="w-6 h-6" />
             </div>
             <p className="text-slate-600 font-medium text-sm">No students match your search or filters.</p>
-            <p className="text-xs text-slate-400">Try clearing your search query or filters.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -123,36 +146,34 @@ export function StudentRegisterTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredStudents.map((s) => {
+                {flattenedRows.map(({ rowId, studentDoc, enrollment }) => {
                   const feeKey = `${selectedYear}-${selectedMonth}`;
-                  const feeData = s.feeStatus?.[feeKey] || {};
-                  const notJoinedYet = isBeforeJoiningDate(s.joiningDate, selectedYear, selectedMonth);
-                  const isLeft = s.status === "left";
+                  const feeData = enrollment.feeStatus?.[feeKey] || {};
+                  const notJoinedYet = isBeforeJoiningDate(enrollment.joiningDate, selectedYear, selectedMonth);
+                  const isLeft = enrollment.status === "left";
                   const amountPaid = feeData.amountPaid || 0;
-                  const remainingDue = s.monthlyFees - amountPaid;
+                  const remainingDue = enrollment.monthlyFees - amountPaid;
                   const isPaidInFull = feeData.status === "paid";
 
-                  // Resolve Class and Subject Names
-                  const classObj = classes.find((cl) => cl.id === s.classId);
-                  const subjectObj = subjects.find((sb) => sb.id === s.subjectId);
+                  const classObj = classes.find((cl) => cl.id === enrollment.classId);
+                  const subjectObj = subjects.find((sb) => sb.id === enrollment.subjectId);
 
                   return (
-                    <tr key={s.id} className="hover:bg-slate-50/80 transition-colors duration-150">
+                    <tr key={rowId} className="hover:bg-slate-50/80 transition-colors duration-150">
                       <td className="py-4 px-5">
                         <button
-                          onClick={() => setSelectedStudentForProfile(s)}
+                          onClick={() => setSelectedStudentForProfile(studentDoc)}
                           className="font-semibold text-indigo-600 hover:text-indigo-800 hover:underline text-left cursor-pointer transition-colors"
                         >
-                          {s.name}
+                          {studentDoc.name}
                         </button>
                         <div className="flex items-center gap-3 text-2xs text-slate-400 mt-0.5">
                           <span className="flex items-center gap-1">
-                            <Icons.Phone /> {formatPhoneNumber(s.phone)}
+                            <Icons.Phone /> {formatPhoneNumber(studentDoc.phone)}
                           </span>
                         </div>
                       </td>
                       
-                      {/* NEW: Class / Subject Column */}
                       <td className="py-4 px-5 text-xs">
                         <div className="font-bold text-slate-800">{subjectObj?.name || "N/A"}</div>
                         <div className="text-3xs text-slate-500 font-medium">Class: {classObj?.name || "N/A"}</div>
@@ -168,18 +189,20 @@ export function StudentRegisterTab({
                           </span>
 
                           <button
-                            onClick={() => setSelectedStudentForEnrollmentView(s)}
+                            onClick={() => setSelectedStudentForEnrollmentView(studentDoc)}
                             className="text-3xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/60 px-2 py-0.5 rounded-full cursor-pointer transition-all active:scale-95 flex items-center gap-1"
-                            title="View Enrolled Classes & Subjects"
+                            title="View All Enrolled Classes"
                           >
                             <Icons.Eye className="w-3 h-3" />
                             <span>View</span>
                           </button>
                         </div>
                       </td>
+
                       <td className="py-4 px-5 font-semibold text-slate-800">
-                        ₹{s.monthlyFees}
+                        ₹{enrollment.monthlyFees}
                       </td>
+
                       <td className="py-4 px-5 text-center">
                         {isLeft ? (
                           isPaidInFull ? (
@@ -188,7 +211,7 @@ export function StudentRegisterTab({
                             </span>
                           ) : (
                             <button
-                              onClick={() => openFeeModal(s)}
+                              onClick={() => openFeeModal(studentDoc, enrollment)}
                               className="px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200 cursor-pointer inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/80 active:scale-95"
                             >
                               🚫 Left Class (Due: ₹{remainingDue})
@@ -200,7 +223,7 @@ export function StudentRegisterTab({
                           </span>
                         ) : (
                           <button
-                            onClick={() => openFeeModal(s)}
+                            onClick={() => openFeeModal(studentDoc, enrollment)}
                             className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200 cursor-pointer inline-flex items-center gap-1.5 active:scale-95 ${
                               feeData.status === "paid"
                                 ? "bg-emerald-100/80 text-emerald-800 hover:bg-emerald-200/80 border border-emerald-300/50"
@@ -210,13 +233,12 @@ export function StudentRegisterTab({
                             }`}
                           >
                             {feeData.status === "paid" && <><Icons.Check className="w-3.5 h-3.5" /> Paid</>}
-                            {feeData.status === "partial" && `⚠️ Paid ₹${feeData.amountPaid} (Due ₹${s.monthlyFees - feeData.amountPaid})`}
+                            {feeData.status === "partial" && `⚠️ Paid ₹${feeData.amountPaid} (Due ₹${enrollment.monthlyFees - feeData.amountPaid})`}
                             {(!feeData.status || feeData.status === "unpaid") && "✕ Unpaid"}
                           </button>
                         )}
                       </td>
 
-                      {/* SHIFTED: Remark Column to Rightmost position */}
                       <td className="py-4 px-5 text-xs text-slate-500 italic max-w-xs truncate text-right">
                         {feeData.remark || "-"}
                       </td>

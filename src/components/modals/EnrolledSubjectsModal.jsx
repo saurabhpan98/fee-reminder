@@ -1,32 +1,20 @@
 // src/components/modals/EnrolledSubjectsModal.jsx
-import React, { useMemo } from "react";
+import React from "react";
 import { Icons } from "../Icons";
 import { formatPhoneNumber } from "../../utils/helpers";
 
 export function EnrolledSubjectsModal({
   selectedStudentForEnrollmentView,
   setSelectedStudentForEnrollmentView,
-  students = [],
   classes = [],
   subjects = [],
-  coachings = []
+  coachings = [],
+  handleToggleEnrollmentStatus
 }) {
   if (!selectedStudentForEnrollmentView) return null;
 
-  const studentPhone = selectedStudentForEnrollmentView.phone?.trim();
-  const targetSiblingIndex = selectedStudentForEnrollmentView.siblingIndex || 1;
-
-  // Search & match records with the SAME phone number AND SAME siblingIndex
-  const matchedStudentRecords = useMemo(() => {
-    if (!studentPhone) return [selectedStudentForEnrollmentView];
-    const matches = students.filter(
-      (s) =>
-        s.phone &&
-        s.phone.trim() === studentPhone &&
-        (s.siblingIndex || 1) === targetSiblingIndex
-    );
-    return matches.length > 0 ? matches : [selectedStudentForEnrollmentView];
-  }, [students, studentPhone, targetSiblingIndex, selectedStudentForEnrollmentView]);
+  const student = selectedStudentForEnrollmentView;
+  const enrollments = student.enrollments || [];
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
@@ -36,10 +24,10 @@ export function EnrolledSubjectsModal({
         <div className="flex justify-between items-start border-b border-slate-100 pb-3">
           <div>
             <h3 className="font-bold text-slate-900 text-base">
-              {selectedStudentForEnrollmentView.name}
+              {student.name}
             </h3>
             <p className="text-3xs text-slate-500 font-medium">
-              Phone: {formatPhoneNumber(studentPhone)}
+              Phone: {formatPhoneNumber(student.phone)}
             </p>
           </div>
           <button 
@@ -50,30 +38,30 @@ export function EnrolledSubjectsModal({
           </button>
         </div>
 
-        {/* List of matched classes & subjects */}
+        {/* List of enrolled classes & subjects */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-2xs font-bold uppercase tracking-wider text-slate-400">
               Classes & Subjects
             </h4>
             <span className="text-3xs font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
-              {matchedStudentRecords.length} {matchedStudentRecords.length === 1 ? "Record" : "Records"}
+              {enrollments.length} {enrollments.length === 1 ? "Class" : "Classes"}
             </span>
           </div>
 
           <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-            {matchedStudentRecords.map((record) => {
-              const coachingObj = coachings.find((c) => c.id === record.coachingId);
-              const classObj = classes.find((cl) => cl.id === record.classId);
-              const subjectObj = subjects.find((sb) => sb.id === record.subjectId);
+            {enrollments.map((enr) => {
+              const coachingObj = coachings.find((c) => c.id === enr.coachingId);
+              const classObj = classes.find((cl) => cl.id === enr.classId);
+              const subjectObj = subjects.find((sb) => sb.id === enr.subjectId);
 
-              const isRecordLeft = record.status === "left";
+              const isLeft = enr.status === "left";
 
               return (
                 <div 
-                  key={record.id} 
+                  key={enr.enrollmentId} 
                   className={`p-3 rounded-2xl border text-xs flex justify-between items-center transition-all ${
-                    isRecordLeft 
+                    isLeft 
                       ? "bg-slate-50/80 border-slate-200/80 text-slate-500" 
                       : "bg-indigo-50/40 border-indigo-100/80 text-slate-800"
                   }`}
@@ -83,7 +71,7 @@ export function EnrolledSubjectsModal({
                       <span>{subjectObj?.name || "Subject N/A"}</span>
                       {subjectObj?.teacher && (
                         <span className="text-3xs text-slate-400 font-normal">
-                          (Teacher: {subjectObj.teacher})
+                          ({subjectObj.teacher})
                         </span>
                       )}
                     </div>
@@ -92,13 +80,16 @@ export function EnrolledSubjectsModal({
                     </div>
                   </div>
 
-                  <span className={`px-2.5 py-0.5 rounded-full text-3xs font-bold shrink-0 ${
-                    isRecordLeft 
-                      ? "bg-rose-100 text-rose-700" 
-                      : "bg-emerald-100 text-emerald-800"
-                  }`}>
-                    {isRecordLeft ? "Was Enrolled (Left)" : "Currently Enrolled"}
-                  </span>
+                  <button
+                    onClick={() => handleToggleEnrollmentStatus(student.id, enr.enrollmentId, enr.status)}
+                    className={`px-2.5 py-1 rounded-full text-3xs font-bold shrink-0 transition-all cursor-pointer ${
+                      isLeft 
+                        ? "bg-slate-200 text-slate-700 hover:bg-slate-300" 
+                        : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                    }`}
+                  >
+                    {isLeft ? "Re-enroll Class" : "Mark as Left"}
+                  </button>
                 </div>
               );
             })}

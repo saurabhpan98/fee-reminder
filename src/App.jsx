@@ -48,16 +48,12 @@ function MainDashboard() {
   // Structure Edit Modal State
   const [structureToEdit, setStructureToEdit] = useState(null);
 
-  // Student Modal State
+  // Student Modal State (1:1 Embedded Model)
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
-  const [editingStudentId, setEditingStudentId] = useState(null);
-  const [studentFormData, setStudentFormData] = useState({
-    name: "", phone: "", address: "", monthlyFees: "",
-    joiningDate: new Date().toISOString().split("T")[0],
-    status: "enrolled", coachingId: "", classId: "", subjectId: "", siblingIndex: 1
-  });
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [editingEnrollmentId, setEditingEnrollmentId] = useState(null);
 
-  // Profile Modal & Enrolled Subjects Modal State
+  // Profile / Enrollment View Modals State
   const [selectedStudentForProfile, setSelectedStudentForProfile] = useState(null);
   const [selectedStudentForEnrollmentView, setSelectedStudentForEnrollmentView] = useState(null);
 
@@ -67,10 +63,10 @@ function MainDashboard() {
 
   // Fee Status Modal State
   const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
-  const [selectedStudentForFee, setSelectedStudentForFee] = useState(null);
+  const [selectedFeeData, setSelectedFeeData] = useState({ student: null, enrollment: null });
   const [feeFormData, setFeeFormData] = useState({ status: "paid", amountPaid: "", remark: "" });
 
-  // UI Tabs
+  // UI Navigation Tabs
   const [activeTab, setActiveTab] = useState("students");
 
   // Sync Realtime Firestore Data
@@ -161,62 +157,112 @@ function MainDashboard() {
     setStructureToEdit(null);
   };
 
-  // Student Form Handlers
+  // Open Add Student Modal
   const openAddStudentModal = () => {
-    setEditingStudentId(null);
-    setStudentFormData({
-      name: "", phone: "", address: "", monthlyFees: "",
-      joiningDate: new Date().toISOString().split("T")[0],
-      status: "enrolled", coachingId: selectedCoaching || "", classId: selectedClass || "", subjectId: selectedSubject || "",
-      siblingIndex: 1
-    });
+    setEditingStudent(null);
+    setEditingEnrollmentId(null);
     setIsStudentModalOpen(true);
   };
 
-  const openEditStudentModal = (student) => {
-    setEditingStudentId(student.id);
-    setStudentFormData({
-      name: student.name || "", phone: student.phone || "", address: student.address || "",
-      monthlyFees: student.monthlyFees || "", joiningDate: student.joiningDate || new Date().toISOString().split("T")[0],
-      status: student.status || "enrolled", coachingId: student.coachingId || "", classId: student.classId || "", subjectId: student.subjectId || "",
-      siblingIndex: student.siblingIndex || 1
-    });
+  // Open Edit Student Enrollment Modal
+  const openEditStudentModal = (student, enrollmentId) => {
+    setEditingStudent(student);
+    setEditingEnrollmentId(enrollmentId);
     setIsStudentModalOpen(true);
   };
 
-  const handleSaveStudent = async (e) => {
-    e.preventDefault();
-    const { name, phone, address, monthlyFees, joiningDate, status, coachingId, classId, subjectId, siblingIndex } = studentFormData;
-    if (!name || !monthlyFees || !coachingId || !classId || !subjectId || !joiningDate) return;
+  // Save Student Enrollment Logic (Single Entity 1:1 Firestore Pattern)
+  const handleSaveStudent = async (formData) => {
+    const { name, phone, address, coachingId, classId, subjectId, monthlyFees, joiningDate, status, siblingIndex, targetStudentDoc } = formData;
+    const uid = currentUser.uid;
 
-    if (editingStudentId) {
-      const studentRef = doc(db, "users", currentUser.uid, "students", editingStudentId);
-      await updateDoc(studentRef, {
-        name: name.trim(), phone: phone.trim(), address: address.trim(), monthlyFees: Number(monthlyFees),
-        joiningDate, status, coachingId, classId, subjectId, siblingIndex: siblingIndex || 1
+    if (editingStudent && editingEnrollmentId) {
+      // Update existing course enrollment inside current student
+      const updatedEnrollments = (editingStudent.enrollments || []).map((e) => {
+        if (e.enrollmentId === editingEnrollmentId) {
+          return {
+            ...e,
+            coachingId,
+            classId,
+            subjectId,
+            monthlyFees: Number(monthlyFees),
+            joiningDate,
+            status
+          };
+        }
+        return e;
+      });
+
+      await updateDoc(doc(db, "users", uid, "students", editingStudent.id), {
+        name: name.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        enrollments: updatedEnrollments
+      });
+    } else if (targetStudentDoc) {
+      // Append a new class enrollment to an existing student's single document
+      const newEnrollment = {
+        enrollmentId: `enr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        coachingId,
+        classId,
+        subjectId,
+        monthlyFees: Number(monthlyFees),
+        joiningDate,
+        status: "enrolled",
+        feeStatus: {}
+      };
+
+      const existingEnrollments = targetStudentDoc.enrollments || [];
+      await updateDoc(doc(db, "users", uid, "students", targetStudentDoc.id), {
+        name: name.trim(),
+        address: address.trim(),
+        enrollments: [...existingEnrollments, newEnrollment]
       });
     } else {
-      await addDoc(collection(db, "users", currentUser.uid, "students"), {
-        name: name.trim(), phone: phone.trim(), address: address.trim(), monthlyFees: Number(monthlyFees),
-        joiningDate, status: "enrolled", coachingId, classId, subjectId, siblingIndex: siblingIndex || 1,
-        feeStatus: {}, createdAt: serverTimestamp()
+      // Create a brand new single student entity document
+      const newEnrollment = {
+        enrollmentId: `enr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        coachingId,
+        classId,
+        subjectId,
+        monthlyFees: Number(monthlyFees),
+        joiningDate,
+        status: "enrolled",
+        feeStatus: {}
+      };
+
+      await addDoc(collection(db, "users", uid, "students"), {
+        name: name.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        siblingIndex: siblingIndex || 1,
+        enrollments: [newEnrollment],
+        createdAt: serverTimestamp()
       });
     }
 
     setIsStudentModalOpen(false);
   };
 
-  const handleToggleEnrollmentStatus = async (studentId, currentStatus) => {
-    const newStatus = currentStatus === "left" ? "enrolled" : "left";
-    const studentRef = doc(db, "users", currentUser.uid, "students", studentId);
-    await updateDoc(studentRef, { status: newStatus });
+  // Toggle specific class enrollment status (Left / Re-enrolled)
+  const handleToggleEnrollmentStatus = async (studentId, enrollmentId, currentStatus) => {
+    const student = students.find((s) => s.id === studentId);
+    if (!student) return;
 
-    if (selectedStudentForProfile && selectedStudentForProfile.id === studentId) {
-      setSelectedStudentForProfile(prev => ({ ...prev, status: newStatus }));
-    }
+    const newStatus = currentStatus === "left" ? "enrolled" : "left";
+    const updatedEnrollments = (student.enrollments || []).map((e) => {
+      if (e.enrollmentId === enrollmentId) {
+        return { ...e, status: newStatus };
+      }
+      return e;
+    });
+
+    await updateDoc(doc(db, "users", currentUser.uid, "students", studentId), {
+      enrollments: updatedEnrollments
+    });
   };
 
-  // Confirmed Delete Handlers
+  // Delete entire student entity (removes student and ALL associated course enrollments)
   const confirmDeleteStudent = async () => {
     if (!studentToDelete) return;
     await deleteDoc(doc(db, "users", currentUser.uid, "students", studentToDelete.id));
@@ -239,63 +285,70 @@ function MainDashboard() {
   };
 
   // Fee Status Modal Handlers
-  const openFeeModal = (student) => {
+  const openFeeModal = (student, enrollment) => {
     const feeKey = `${selectedYear}-${selectedMonth}`;
-    const currentFeeData = student.feeStatus?.[feeKey] || {};
+    const feeData = enrollment.feeStatus?.[feeKey] || {};
 
-    setSelectedStudentForFee(student);
+    setSelectedFeeData({ student, enrollment });
     setFeeFormData({
-      status: currentFeeData.status || "unpaid",
-      amountPaid: currentFeeData.amountPaid !== undefined ? currentFeeData.amountPaid : "",
-      remark: currentFeeData.remark || ""
+      status: feeData.status || "unpaid",
+      amountPaid: feeData.amountPaid !== undefined ? feeData.amountPaid : "",
+      remark: feeData.remark || ""
     });
     setIsFeeModalOpen(true);
   };
 
   const handleSaveFeeStatus = async (e) => {
     e.preventDefault();
-    if (!selectedStudentForFee) return;
+    const { student, enrollment } = selectedFeeData;
+    if (!student || !enrollment) return;
 
     const feeKey = `${selectedYear}-${selectedMonth}`;
-    const studentRef = doc(db, "users", currentUser.uid, "students", selectedStudentForFee.id);
+    const updatedEnrollments = (student.enrollments || []).map((e) => {
+      if (e.enrollmentId === enrollment.enrollmentId) {
+        const feeStatus = e.feeStatus || {};
+        return {
+          ...e,
+          feeStatus: {
+            ...feeStatus,
+            [feeKey]: {
+              status: feeFormData.status,
+              amountPaid: feeFormData.status === "paid" 
+                ? Number(e.monthlyFees) 
+                : feeFormData.status === "unpaid" 
+                ? 0 
+                : Number(feeFormData.amountPaid || 0),
+              remark: feeFormData.remark.trim()
+            }
+          }
+        };
+      }
+      return e;
+    });
 
-    const updatedData = {
-      status: feeFormData.status,
-      amountPaid: feeFormData.status === "paid" 
-        ? Number(selectedStudentForFee.monthlyFees) 
-        : feeFormData.status === "unpaid" 
-        ? 0 
-        : Number(feeFormData.amountPaid || 0),
-      remark: feeFormData.remark.trim()
-    };
-
-    await updateDoc(studentRef, {
-      [`feeStatus.${feeKey}`]: updatedData
+    await updateDoc(doc(db, "users", currentUser.uid, "students", student.id), {
+      enrollments: updatedEnrollments
     });
 
     setIsFeeModalOpen(false);
   };
 
-  // Calculations
-  const filteredStudents = useMemo(() => {
-    return students.filter((s) => {
-      if (searchQuery.trim() && !s.name.toLowerCase().includes(searchQuery.toLowerCase().trim())) {
-        return false;
-      }
-      if (selectedCoaching && s.coachingId !== selectedCoaching) return false;
-      if (selectedClass && s.classId !== selectedClass) return false;
-      if (selectedSubject && s.subjectId !== selectedSubject) return false;
-      return true;
-    });
-  }, [students, searchQuery, selectedCoaching, selectedClass, selectedSubject]);
-
+  // Calculate Due Reminders Across All Students & Embedded Enrollments
   const dueReminders = useMemo(() => {
     const feeKey = `${selectedYear}-${selectedMonth}`;
-    return students.filter(s => {
-      if (isBeforeJoiningDate(s.joiningDate, selectedYear, selectedMonth)) return false;
-      const feeData = s.feeStatus?.[feeKey];
-      return !feeData || feeData.status !== "paid";
+    const reminders = [];
+
+    students.forEach((s) => {
+      (s.enrollments || []).forEach((e) => {
+        if (isBeforeJoiningDate(e.joiningDate, selectedYear, selectedMonth)) return;
+        const feeData = e.feeStatus?.[feeKey];
+        if (!feeData || feeData.status !== "paid") {
+          reminders.push({ studentDoc: s, enrollment: e });
+        }
+      });
     });
+
+    return reminders;
   }, [students, selectedMonth, selectedYear]);
 
   return (
@@ -327,7 +380,7 @@ function MainDashboard() {
               <div>
                 <h4 className="font-bold text-amber-950 text-sm">Fee Collection Alert (Past 10th of {selectedMonth})</h4>
                 <p className="text-xs text-amber-800/90 font-medium mt-0.5">
-                  You have <strong className="font-bold underline">{dueReminders.length}</strong> student(s) with pending payments for {selectedMonth} {selectedYear}.
+                  You have <strong className="font-bold underline">{dueReminders.length}</strong> unpaid course enrollment(s) for {selectedMonth} {selectedYear}.
                 </p>
               </div>
             </div>
@@ -340,7 +393,7 @@ function MainDashboard() {
           </div>
         )}
 
-        {/* Navigation Menu */}
+        {/* Navigation Menu Tabs */}
         <div className="flex p-1 bg-slate-200/60 rounded-2xl w-full sm:w-fit space-x-1 border border-slate-200/60">
           <button
             onClick={() => setActiveTab("students")}
@@ -382,7 +435,7 @@ function MainDashboard() {
           </button>
         </div>
 
-        {/* Tab Screens */}
+        {/* Tab Views */}
         {activeTab === "students" && (
           <StudentRegisterTab
             searchQuery={searchQuery} setSearchQuery={setSearchQuery}
@@ -392,7 +445,7 @@ function MainDashboard() {
             selectedSubject={selectedSubject} setSelectedSubject={setSelectedSubject} subjects={subjects}
             selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth}
             selectedYear={selectedYear} setSelectedYear={setSelectedYear}
-            loading={loading} filteredStudents={filteredStudents}
+            loading={loading} students={students}
             setSelectedStudentForProfile={setSelectedStudentForProfile}
             openFeeModal={openFeeModal}
             setSelectedStudentForEnrollmentView={setSelectedStudentForEnrollmentView}
@@ -437,10 +490,10 @@ function MainDashboard() {
       <EnrolledSubjectsModal
         selectedStudentForEnrollmentView={selectedStudentForEnrollmentView}
         setSelectedStudentForEnrollmentView={setSelectedStudentForEnrollmentView}
-        students={students}
         classes={classes}
         subjects={subjects}
         coachings={coachings}
+        handleToggleEnrollmentStatus={handleToggleEnrollmentStatus}
       />
       <ConfirmDeleteModal 
         studentToDelete={studentToDelete} 
@@ -455,10 +508,9 @@ function MainDashboard() {
       <StudentModal 
         isStudentModalOpen={isStudentModalOpen} 
         setIsStudentModalOpen={setIsStudentModalOpen} 
-        editingStudentId={editingStudentId} 
+        editingStudent={editingStudent} 
+        editingEnrollmentId={editingEnrollmentId}
         handleSaveStudent={handleSaveStudent} 
-        studentFormData={studentFormData} 
-        setStudentFormData={setStudentFormData} 
         coachings={coachings} 
         classes={classes} 
         subjects={subjects} 
@@ -467,7 +519,7 @@ function MainDashboard() {
       <FeeModal 
         isFeeModalOpen={isFeeModalOpen} 
         setIsFeeModalOpen={setIsFeeModalOpen} 
-        selectedStudentForFee={selectedStudentForFee} 
+        selectedStudentForFee={selectedFeeData.student} 
         selectedMonth={selectedMonth} 
         selectedYear={selectedYear} 
         handleSaveFeeStatus={handleSaveFeeStatus} 

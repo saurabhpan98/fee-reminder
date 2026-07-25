@@ -6,10 +6,9 @@ import { COUNTRY_CODES } from "../../utils/helpers";
 export function StudentModal({
   isStudentModalOpen,
   setIsStudentModalOpen,
-  editingStudentId,
+  editingStudent,
+  editingEnrollmentId,
   handleSaveStudent,
-  studentFormData,
-  setStudentFormData,
   coachings,
   classes,
   subjects,
@@ -17,127 +16,148 @@ export function StudentModal({
 }) {
   const [countryCode, setCountryCode] = useState("+91");
   const [localPhone, setLocalPhone] = useState("");
-  const [autofilledStudentId, setAutofilledStudentId] = useState(null);
-  const [isSibling, setIsSibling] = useState(false);
 
-  // Parse phone number into Country Code + Local Number when modal opens
+  const [studentSelectionMode, setStudentSelectionMode] = useState("none"); // "none" | "existing" | "new_sibling"
+  const [selectedStudentDoc, setSelectedStudentDoc] = useState(null);
+
+  const [formData, setFormData] = useState({
+    name: "",
+    address: "",
+    coachingId: "",
+    classId: "",
+    subjectId: "",
+    monthlyFees: "",
+    joiningDate: new Date().toISOString().split("T")[0],
+    status: "enrolled",
+    siblingIndex: 1
+  });
+
   useEffect(() => {
     if (isStudentModalOpen) {
-      setAutofilledStudentId(null);
-      setIsSibling(false);
-      const rawPhone = studentFormData.phone || "";
-      const matchedCode = COUNTRY_CODES.find((c) => rawPhone.startsWith(c.code));
+      setStudentSelectionMode("none");
+      setSelectedStudentDoc(null);
 
-      if (matchedCode) {
-        setCountryCode(matchedCode.code);
-        setLocalPhone(rawPhone.replace(matchedCode.code, "").trim());
+      if (editingStudent) {
+        // Editing an existing enrollment
+        const rawPhone = editingStudent.phone || "";
+        const matchedCode = COUNTRY_CODES.find((c) => rawPhone.startsWith(c.code));
+        if (matchedCode) {
+          setCountryCode(matchedCode.code);
+          setLocalPhone(rawPhone.replace(matchedCode.code, "").trim());
+        } else {
+          setCountryCode("+91");
+          setLocalPhone(rawPhone.trim());
+        }
+
+        const currentEnr = (editingStudent.enrollments || []).find((e) => e.enrollmentId === editingEnrollmentId) || {};
+
+        setFormData({
+          name: editingStudent.name || "",
+          address: editingStudent.address || "",
+          coachingId: currentEnr.coachingId || "",
+          classId: currentEnr.classId || "",
+          subjectId: currentEnr.subjectId || "",
+          monthlyFees: currentEnr.monthlyFees || "",
+          joiningDate: currentEnr.joiningDate || new Date().toISOString().split("T")[0],
+          status: currentEnr.status || "enrolled",
+          siblingIndex: editingStudent.siblingIndex || 1
+        });
       } else {
+        // Adding new student/enrollment
+        setLocalPhone("");
         setCountryCode("+91");
-        setLocalPhone(rawPhone.trim());
+        setFormData({
+          name: "",
+          address: "",
+          coachingId: "",
+          classId: "",
+          subjectId: "",
+          monthlyFees: "",
+          joiningDate: new Date().toISOString().split("T")[0],
+          status: "enrolled",
+          siblingIndex: 1
+        });
       }
     }
-  }, [isStudentModalOpen, editingStudentId]);
+  }, [isStudentModalOpen, editingStudent, editingEnrollmentId]);
 
   const fullPhone = useMemo(() => {
     return localPhone.trim() ? `${countryCode} ${localPhone.trim()}` : "";
   }, [countryCode, localPhone]);
 
-  // Find existing students in the SAME coaching with the SAME phone number
-  const existingMatchesInCoaching = useMemo(() => {
-    if (editingStudentId || !studentFormData.coachingId || !localPhone.trim()) {
-      return [];
-    }
+  // Find existing unique student documents for this phone number
+  const matchedStudents = useMemo(() => {
+    if (editingStudent || !localPhone.trim()) return [];
     return students.filter(
-      (s) =>
-        s.coachingId === studentFormData.coachingId &&
-        s.phone &&
-        s.phone.trim() === fullPhone.trim()
-    );
-  }, [students, studentFormData.coachingId, fullPhone, editingStudentId, localPhone]);
-
-  // Calculate highest existing siblingIndex for this phone number
-  const highestSiblingIndex = useMemo(() => {
-    if (!localPhone.trim()) return 1;
-    const samePhoneStudents = students.filter(
       (s) => s.phone && s.phone.trim() === fullPhone.trim()
     );
-    if (samePhoneStudents.length === 0) return 1;
-    const maxIdx = Math.max(...samePhoneStudents.map((s) => s.siblingIndex || 1));
-    return maxIdx;
-  }, [students, fullPhone, localPhone]);
+  }, [students, fullPhone, localPhone, editingStudent]);
 
-  // Check if current form selections match an ALREADY ENROLLED Class + Subject for this phone
-  const isDuplicateEnrollment = useMemo(() => {
-    if (
-      editingStudentId ||
-      isSibling || // If marked as a sibling, ignore duplicate block
-      !studentFormData.coachingId ||
-      !studentFormData.classId ||
-      !studentFormData.subjectId ||
-      !localPhone.trim()
-    ) {
-      return false;
-    }
-    return students.some(
-      (s) =>
-        s.coachingId === studentFormData.coachingId &&
-        s.classId === studentFormData.classId &&
-        s.subjectId === studentFormData.subjectId &&
-        s.phone &&
-        s.phone.trim() === fullPhone.trim() &&
-        (s.siblingIndex || 1) === (studentFormData.siblingIndex || 1)
-    );
-  }, [students, studentFormData, fullPhone, editingStudentId, localPhone, isSibling]);
+  // Calculate highest sibling index
+  const nextSiblingIndex = useMemo(() => {
+    if (matchedStudents.length === 0) return 1;
+    const maxIdx = Math.max(...matchedStudents.map((s) => s.siblingIndex || 1));
+    return maxIdx + 1;
+  }, [matchedStudents]);
+
+  // Check if target student is ALREADY enrolled in selected Class + Subject
+  const duplicateConflict = useMemo(() => {
+    if (!formData.coachingId || !formData.classId || !formData.subjectId) return false;
+
+    const targetStudent = editingStudent || selectedStudentDoc;
+    if (!targetStudent) return false;
+
+    return (targetStudent.enrollments || []).some((e) => {
+      if (editingEnrollmentId && e.enrollmentId === editingEnrollmentId) return false;
+      return (
+        e.coachingId === formData.coachingId &&
+        e.classId === formData.classId &&
+        e.subjectId === formData.subjectId
+      );
+    });
+  }, [formData.coachingId, formData.classId, formData.subjectId, editingStudent, selectedStudentDoc, editingEnrollmentId]);
 
   if (!isStudentModalOpen) return null;
 
   const handlePhoneChange = (code, number) => {
     setCountryCode(code);
     setLocalPhone(number);
-    const updatedFullPhone = number.trim() ? `${code} ${number.trim()}` : "";
-    setStudentFormData((prev) => ({ 
-      ...prev, 
-      phone: updatedFullPhone,
-      siblingIndex: prev.siblingIndex || 1
-    }));
-    setAutofilledStudentId(null);
-    setIsSibling(false);
+    setStudentSelectionMode("none");
+    setSelectedStudentDoc(null);
   };
 
-  const handleSelectExistingStudent = (existingStudent) => {
-    setStudentFormData((prev) => ({
+  const handleSelectExistingStudent = (st) => {
+    setStudentSelectionMode("existing");
+    setSelectedStudentDoc(st);
+    setFormData((prev) => ({
       ...prev,
-      name: existingStudent.name || "",
-      address: existingStudent.address || "",
-      monthlyFees: existingStudent.monthlyFees || "",
-      joiningDate: existingStudent.joiningDate || new Date().toISOString().split("T")[0],
-      siblingIndex: existingStudent.siblingIndex || 1 // Keep same sibling ID for same person
+      name: st.name || "",
+      address: st.address || "",
+      siblingIndex: st.siblingIndex || 1
     }));
-    setAutofilledStudentId(existingStudent.id);
-    setIsSibling(false);
   };
 
-  const handleSiblingToggle = (checked) => {
-    setIsSibling(checked);
-    if (checked) {
-      // Assign new sibling index
-      setStudentFormData((prev) => ({
-        ...prev,
-        siblingIndex: highestSiblingIndex + 1
-      }));
-    } else {
-      // Reset back to siblingIndex 1 if un-checked
-      setStudentFormData((prev) => ({
-        ...prev,
-        siblingIndex: 1
-      }));
-    }
+  const handleSelectAddNewSibling = () => {
+    setStudentSelectionMode("new_sibling");
+    setSelectedStudentDoc(null);
+    const firstMatch = matchedStudents[0];
+    setFormData((prev) => ({
+      ...prev,
+      name: "",
+      address: firstMatch?.address || "",
+      siblingIndex: nextSiblingIndex
+    }));
   };
 
   const onSubmit = (e) => {
     e.preventDefault();
-    if (isDuplicateEnrollment) return;
-    handleSaveStudent(e);
+    if (duplicateConflict) return;
+
+    handleSaveStudent({
+      ...formData,
+      phone: fullPhone,
+      targetStudentDoc: selectedStudentDoc
+    });
   };
 
   return (
@@ -145,7 +165,7 @@ export function StudentModal({
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-md w-full p-6 space-y-4 animate-scale-up max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center border-b border-slate-100 pb-3">
           <h3 className="font-bold text-slate-900">
-            {editingStudentId ? "Edit Student Details" : "Add New Student"}
+            {editingStudent ? "Edit Class Enrollment" : "Add Student / Course"}
           </h3>
           <button 
             onClick={() => setIsStudentModalOpen(false)} 
@@ -156,12 +176,13 @@ export function StudentModal({
         </div>
 
         <form onSubmit={onSubmit} className="space-y-3">
+          {/* Coaching */}
           <div>
             <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Coaching</label>
             <select 
               required
-              value={studentFormData.coachingId}
-              onChange={(e) => setStudentFormData({ ...studentFormData, coachingId: e.target.value, classId: "", subjectId: "" })}
+              value={formData.coachingId}
+              onChange={(e) => setFormData({ ...formData, coachingId: e.target.value, classId: "", subjectId: "" })}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
             >
               <option value="">Select Coaching</option>
@@ -169,17 +190,18 @@ export function StudentModal({
             </select>
           </div>
 
+          {/* Class & Subject */}
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Class Level</label>
               <select 
                 required
-                value={studentFormData.classId}
-                onChange={(e) => setStudentFormData({ ...studentFormData, classId: e.target.value, subjectId: "" })}
+                value={formData.classId}
+                onChange={(e) => setFormData({ ...formData, classId: e.target.value, subjectId: "" })}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
               >
                 <option value="">Select Class</option>
-                {classes.filter((cl) => cl.coachingId === studentFormData.coachingId).map((cl) => (
+                {classes.filter((cl) => cl.coachingId === formData.coachingId).map((cl) => (
                   <option key={cl.id} value={cl.id}>{cl.name}</option>
                 ))}
               </select>
@@ -188,19 +210,19 @@ export function StudentModal({
               <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Subject</label>
               <select 
                 required
-                value={studentFormData.subjectId}
-                onChange={(e) => setStudentFormData({ ...studentFormData, subjectId: e.target.value })}
+                value={formData.subjectId}
+                onChange={(e) => setFormData({ ...formData, subjectId: e.target.value })}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
               >
                 <option value="">Select Subject</option>
-                {subjects.filter((sb) => sb.classId === studentFormData.classId).map((sb) => (
+                {subjects.filter((sb) => sb.classId === formData.classId).map((sb) => (
                   <option key={sb.id} value={sb.id}>{sb.name}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Phone Input with Country Flag Picker */}
+          {/* Phone Number */}
           <div>
             <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Phone Number</label>
             <div className="flex gap-2">
@@ -225,103 +247,101 @@ export function StudentModal({
             </div>
           </div>
 
-          {/* EXISTING MATCHES PROMPT */}
-          {existingMatchesInCoaching.length > 0 && (
-            <div className="p-3.5 bg-amber-50/80 border border-amber-200/90 rounded-2xl space-y-2 animate-fade-in">
-              <div className="flex items-center gap-1.5 text-amber-900 text-xs font-bold">
-                <Icons.AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Existing Student(s) Found ({existingMatchesInCoaching.length})</span>
+          {/* MATCHING EXISTING STUDENTS */}
+          {matchedStudents.length > 0 && !editingStudent && (
+            <div className="p-3.5 bg-indigo-50/80 border border-indigo-200/80 rounded-2xl space-y-2.5 animate-fade-in">
+              <div className="flex items-center justify-between text-indigo-950 text-xs font-bold">
+                <span className="flex items-center gap-1.5">
+                  <Icons.Users className="w-4 h-4 text-indigo-600" />
+                  Registered Student(s) Found
+                </span>
               </div>
-              <p className="text-3xs text-amber-800 leading-relaxed font-medium">
-                Student(s) with this phone number are already registered. Choose one to autofill their profile for enrolling in a new class/subject:
-              </p>
 
-              <div className="space-y-1.5 pt-1 max-h-36 overflow-y-auto pr-1">
-                {existingMatchesInCoaching.map((st) => {
-                  const classObj = classes.find((cl) => cl.id === st.classId);
-                  const subjectObj = subjects.find((sb) => sb.id === st.subjectId);
-                  const isSelected = autofilledStudentId === st.id;
+              <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                {matchedStudents.map((st) => {
+                  const isSelected = studentSelectionMode === "existing" && selectedStudentDoc?.id === st.id;
+                  const activeCourses = (st.enrollments || []).length;
 
                   return (
                     <div 
                       key={st.id} 
                       className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
                         isSelected 
-                          ? "bg-indigo-50 border-indigo-300 text-indigo-900" 
-                          : "bg-white border-amber-200 text-slate-800"
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-xs" 
+                          : "bg-white text-slate-800 border-indigo-100 hover:border-indigo-300"
                       }`}
                     >
-                      <div className="text-3xs space-y-0.5">
-                        <div className="font-bold text-xs text-slate-900">{st.name}</div>
-                        <div className="text-slate-500">
-                          Class: {classObj?.name || "N/A"} • Subject: {subjectObj?.name || "N/A"}
+                      <div className="text-3xs">
+                        <div className="font-bold text-xs">
+                          {st.name} <span className="opacity-75 font-normal">(Sibling {st.siblingIndex || 1})</span>
+                        </div>
+                        <div className={isSelected ? "text-indigo-100" : "text-slate-500"}>
+                          Enrolled in {activeCourses} {activeCourses === 1 ? "class" : "classes"}
                         </div>
                       </div>
 
                       <button
                         type="button"
                         onClick={() => handleSelectExistingStudent(st)}
-                        className={`px-2.5 py-1 text-3xs font-bold rounded-lg transition-all cursor-pointer ${
+                        className={`px-3 py-1 text-3xs font-bold rounded-lg transition-all cursor-pointer ${
                           isSelected
-                            ? "bg-indigo-600 text-white"
-                            : "bg-amber-100 hover:bg-amber-200 text-amber-900"
+                            ? "bg-white text-indigo-700"
+                            : "bg-indigo-100 hover:bg-indigo-200 text-indigo-800"
                         }`}
                       >
-                        {isSelected ? "✓ Selected" : `Enroll ${st.name.split(" ")[0]}`}
+                        {isSelected ? "Selected" : `Add Course for ${st.name.split(" ")[0]}`}
                       </button>
                     </div>
                   );
                 })}
               </div>
-            </div>
-          )}
 
-          {/* DUPLICATE ENROLLMENT WARNING BANNER WITH SIBLING CHECKBOX */}
-          {(isDuplicateEnrollment || isSibling) && (
-            <div className={`p-3.5 border rounded-2xl space-y-2.5 animate-fade-in ${
-              isSibling 
-                ? "bg-emerald-50 border-emerald-200 text-emerald-900" 
-                : "bg-rose-50 border-rose-200 text-rose-800"
-            }`}>
-              <div className="flex items-start gap-2 text-xs font-semibold">
-                <Icons.AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${isSibling ? "text-emerald-600" : "text-rose-600"}`} />
+              <button
+                type="button"
+                onClick={handleSelectAddNewSibling}
+                className={`w-full py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  studentSelectionMode === "new_sibling"
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                    : "bg-white hover:bg-slate-50 text-slate-700 border-indigo-200"
+                }`}
+              >
+                <Icons.Plus className="w-3.5 h-3.5" />
                 <span>
-                  {isSibling 
-                    ? "Sibling enrollment enabled! You can now proceed to save." 
-                    : "A student with this phone number is already enrolled in this exact Class and Subject."}
+                  {studentSelectionMode === "new_sibling"
+                    ? `Registering as Sibling ${nextSiblingIndex}`
+                    : "Register as a New Sibling"}
                 </span>
-              </div>
-
-              {/* Sibling Checkbox Option */}
-              <label className="flex items-center gap-2 pt-1 border-t border-slate-200/60 cursor-pointer text-xs font-bold text-slate-800 select-none">
-                <input 
-                  type="checkbox"
-                  checked={isSibling}
-                  onChange={(e) => handleSiblingToggle(e.target.checked)}
-                  className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
-                />
-                <span>Are you adding a sibling?</span>
-              </label>
+              </button>
             </div>
           )}
 
+          {/* DUPLICATE WARNING */}
+          {duplicateConflict && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-2 animate-fade-in font-medium">
+              <Icons.AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>This student is already enrolled in this exact Class & Subject.</span>
+            </div>
+          )}
+
+          {/* Student Name */}
           <div>
             <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Student Full Name</label>
             <input 
               type="text" required placeholder="Rahul Sharma"
-              value={studentFormData.name}
-              onChange={(e) => setStudentFormData({ ...studentFormData, name: e.target.value })}
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
             />
           </div>
 
+          {/* Fees & Date */}
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Monthly Fees (₹)</label>
               <input 
                 type="number" required placeholder="1500"
-                value={studentFormData.monthlyFees}
-                onChange={(e) => setStudentFormData({ ...studentFormData, monthlyFees: e.target.value })}
+                value={formData.monthlyFees}
+                onChange={(e) => setFormData({ ...formData, monthlyFees: e.target.value })}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
               />
             </div>
@@ -329,19 +349,19 @@ export function StudentModal({
               <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Joining Date</label>
               <input 
                 type="date" required
-                value={studentFormData.joiningDate}
-                onChange={(e) => setStudentFormData({ ...studentFormData, joiningDate: e.target.value })}
+                value={formData.joiningDate}
+                onChange={(e) => setFormData({ ...formData, joiningDate: e.target.value })}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
               />
             </div>
           </div>
 
-          {editingStudentId && (
+          {editingStudent && (
             <div>
-              <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Enrollment Status</label>
+              <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Course Status</label>
               <select 
-                value={studentFormData.status}
-                onChange={(e) => setStudentFormData({ ...studentFormData, status: e.target.value })}
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
               >
                 <option value="enrolled">🟢 Enrolled</option>
@@ -350,12 +370,13 @@ export function StudentModal({
             </div>
           )}
 
+          {/* Address */}
           <div>
             <label className="block text-3xs font-bold text-slate-400 uppercase tracking-wider mb-1">Address</label>
             <input 
               type="text" placeholder="Street / Area details"
-              value={studentFormData.address}
-              onChange={(e) => setStudentFormData({ ...studentFormData, address: e.target.value })}
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
             />
           </div>
@@ -370,14 +391,14 @@ export function StudentModal({
             </button>
             <button 
               type="submit" 
-              disabled={isDuplicateEnrollment}
+              disabled={duplicateConflict}
               className={`px-4 py-2 text-white text-xs rounded-xl font-semibold shadow-xs transition-all duration-150 ${
-                isDuplicateEnrollment 
+                duplicateConflict 
                   ? "bg-slate-300 cursor-not-allowed" 
                   : "bg-indigo-600 hover:bg-indigo-700 active:scale-95 cursor-pointer"
               }`}
             >
-              {editingStudentId ? "Update Student" : "Save Student"}
+              {editingStudent ? "Update Enrollment" : "Save Enrollment"}
             </button>
           </div>
         </form>
