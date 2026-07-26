@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
-import { downloadFeeSummaryCSV, downloadFeeSummaryPDF, downloadMultiMonthStudentReceiptPDF } from '../../utils/exportUtils';
+import { downloadFeeSummaryCSV, downloadFeeSummaryPDF, downloadClassSubjectRangeReceiptPDF } from '../../utils/exportUtils';
 import { Download, FileText, FileSpreadsheet, X } from 'lucide-react';
 
 export const ExportReportModal = ({ coaching, onClose }) => {
@@ -121,9 +121,10 @@ export const ExportReportModal = ({ coaching, onClose }) => {
       const records = await fetchReportRecords();
       if (!selectedStudent || records.length === 0) return alert('No records found for selected student.');
 
-      downloadMultiMonthStudentReceiptPDF({
+      downloadClassSubjectRangeReceiptPDF({
         coaching,
         student: selectedStudent,
+        classSubjectInfo: selectedStudent.enrollments?.[0] || {},
         monthRecords: records,
         dateRangeText: `${startMonth}/${startYear} to ${endMonth}/${endYear}`
       });
@@ -213,6 +214,7 @@ export const ExportReportModal = ({ coaching, onClose }) => {
               >
                 <option value={2025}>2025</option>
                 <option value={2026}>2026</option>
+                <option value={2027}>2027</option>
               </select>
             </div>
           </div>
@@ -228,6 +230,7 @@ export const ExportReportModal = ({ coaching, onClose }) => {
                   <select value={startYear} onChange={(e) => setStartYear(e.target.value)} className="w-1/2 p-2 bg-slate-50 border rounded-xl text-xs font-bold">
                     <option value={2025}>2025</option>
                     <option value={2026}>2026</option>
+                    <option value={2027}>2027</option>
                   </select>
                 </div>
               </div>
@@ -241,6 +244,7 @@ export const ExportReportModal = ({ coaching, onClose }) => {
                   <select value={endYear} onChange={(e) => setEndYear(e.target.value)} className="w-1/2 p-2 bg-slate-50 border rounded-xl text-xs font-bold">
                     <option value={2025}>2025</option>
                     <option value={2026}>2026</option>
+                    <option value={2027}>2027</option>
                   </select>
                 </div>
               </div>
@@ -270,3 +274,5 @@ export const ExportReportModal = ({ coaching, onClose }) => {
     </div>
   );
 };
+
+export default ExportReportModal;

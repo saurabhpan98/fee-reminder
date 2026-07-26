@@ -9,7 +9,7 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { AddStudentPage } from './pages/AddStudentPage';
 import { StudentDetailsPage } from './pages/StudentDetailsPage';
 import { ClassDetailsPage } from './pages/ClassDetailsPage';
-import { SubjectDetailsPage } from './pages/SubjectDetailsPage';
+import SubjectDetailsPage from './pages/SubjectDetailsPage';
 import { CoachingView } from './components/coaching/CoachingView';
 import { TeacherDashboard } from './components/dashboard/TeacherDashboard';
 

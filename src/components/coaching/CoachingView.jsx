@@ -4,10 +4,9 @@ import { db } from '../../firebase';
 import { collection, getDocs, addDoc, updateDoc, setDoc, doc } from 'firebase/firestore';
 import { RemindersTab } from './RemindersTab';
 import { ExportReportModal } from './ExportReportModal';
-import { downloadPaymentReceiptPDF } from '../../utils/exportUtils';
 import { 
   Plus, BookOpen, Bell, ArrowLeft, Search, X, 
-  Layers, Bookmark, ChevronRight, AlertCircle, Users, Download, FileText 
+  Layers, Bookmark, ChevronRight, AlertCircle, Users, Download, Calendar 
 } from 'lucide-react';
 
 export const CoachingView = ({ 
@@ -26,6 +25,10 @@ export const CoachingView = ({
   const [enrollmentStatusFilter, setEnrollmentStatusFilter] = useState(initialState.enrollmentStatusFilter || 'all');
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Roster Month & Year Filter
+  const [selectedMonth, setSelectedMonth] = useState(initialState.selectedMonth || new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(initialState.selectedYear || new Date().getFullYear());
+
   // Quick Fee & Export Modal States
   const [activeFeeModal, setActiveFeeModal] = useState(null);
   const [feeModalForm, setFeeModalForm] = useState({ status: 'paid', amountPaid: 0, remark: '' });
@@ -41,12 +44,9 @@ export const CoachingView = ({
   const [targetClassForSubject, setTargetClassForSubject] = useState('');
   const [subjectForm, setSubjectForm] = useState({ name: '', teacherName: '' });
 
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
-
   useEffect(() => {
     fetchCoachingData();
-  }, [coaching.id, currentYear, currentMonth]);
+  }, [coaching.id, selectedYear, selectedMonth]);
 
   const fetchCoachingData = async () => {
     const classSnap = await getDocs(collection(db, 'coachings', coaching.id, 'classes'));
@@ -62,7 +62,7 @@ export const CoachingView = ({
     const records = {};
     feeSnap.docs.forEach(d => {
       const data = d.data();
-      if (data.coachingId === coaching.id && data.year === currentYear && data.month === currentMonth) {
+      if (data.coachingId === coaching.id && data.year === Number(selectedYear) && data.month === Number(selectedMonth)) {
         records[`${data.studentId}_${data.enrollmentId}`] = data;
       }
     });
@@ -113,13 +113,13 @@ export const CoachingView = ({
     if (feeModalForm.status === 'paid') finalAmount = enrollment.monthlyFee;
     if (feeModalForm.status === 'unpaid') finalAmount = 0;
 
-    const recordId = `${student.id}_${enrollment.enrollmentId}_${currentYear}_${currentMonth}`;
+    const recordId = `${student.id}_${enrollment.enrollmentId}_${selectedYear}_${selectedMonth}`;
     await setDoc(doc(db, 'feeRecords', recordId), {
       studentId: student.id,
       enrollmentId: enrollment.enrollmentId,
       coachingId: coaching.id,
-      year: currentYear,
-      month: currentMonth,
+      year: Number(selectedYear),
+      month: Number(selectedMonth),
       status: feeModalForm.status,
       amountPaid: finalAmount,
       remark: feeModalForm.remark || '',
@@ -174,22 +174,47 @@ export const CoachingView = ({
       (!selectedSubjectId || e.subjectId === selectedSubjectId)
     );
 
-    const isEnrolled = selectedClassId 
-      ? enrollments.some(e => e.classId === selectedClassId && e.status === 'active')
-      : enrollments.some(e => e.status === 'active');
-
-    const isLeft = selectedClassId
-      ? enrollments.some(e => e.classId === selectedClassId && e.status === 'unassigned')
-      : enrollments.length > 0 && enrollments.every(e => e.status === 'unassigned');
-
     const primaryEnrollment = matchingEnrollment || enrollments[0];
+
+    let isNotEnrolledYet = false;
+    if (student.createdAt) {
+      const createdDate = new Date(student.createdAt);
+      const createdVal = createdDate.getFullYear() * 12 + (createdDate.getMonth() + 1);
+      const filterVal = Number(selectedYear) * 12 + Number(selectedMonth);
+
+      if (filterVal < createdVal) {
+        isNotEnrolledYet = true;
+      }
+    }
+
+    const isEnrolled = !isNotEnrolledYet && (
+      selectedClassId 
+        ? enrollments.some(e => e.classId === selectedClassId && e.status === 'active')
+        : enrollments.some(e => e.status === 'active')
+    );
+
+    const isLeft = !isNotEnrolledYet && (
+      selectedClassId
+        ? enrollments.some(e => e.classId === selectedClassId && e.status === 'unassigned')
+        : enrollments.length > 0 && enrollments.every(e => e.status === 'unassigned')
+    );
+
     const feeRecord = primaryEnrollment ? feeRecords[`${student.id}_${primaryEnrollment.enrollmentId}`] : null;
     const feeStatus = feeRecord?.status || 'unpaid';
     const hasPendingFee = feeStatus === 'unpaid' || feeStatus === 'partially_paid';
 
     const isLeftWithPendingFee = isLeft && hasPendingFee;
 
-    return { matchingEnrollment: primaryEnrollment, isEnrolled, isLeft, feeRecord, feeStatus, hasPendingFee, isLeftWithPendingFee };
+    return { 
+      matchingEnrollment: primaryEnrollment, 
+      isEnrolled, 
+      isLeft, 
+      isNotEnrolledYet, 
+      feeRecord, 
+      feeStatus, 
+      hasPendingFee, 
+      isLeftWithPendingFee 
+    };
   };
 
   const filteredStudents = students.filter(student => {
@@ -206,9 +231,10 @@ export const CoachingView = ({
       if (!hasClassMatch) return false;
     }
 
-    const { isEnrolled, isLeft } = getStudentContext(student);
+    const { isEnrolled, isLeft, isNotEnrolledYet } = getStudentContext(student);
     if (enrollmentStatusFilter === 'enrolled' && !isEnrolled) return false;
     if (enrollmentStatusFilter === 'left' && !isLeft) return false;
+    if (enrollmentStatusFilter === 'not_enrolled' && !isNotEnrolledYet) return false;
 
     return true;
   });
@@ -220,8 +246,8 @@ export const CoachingView = ({
     if (ctxA.isLeftWithPendingFee && !ctxB.isLeftWithPendingFee) return -1;
     if (!ctxA.isLeftWithPendingFee && ctxB.isLeftWithPendingFee) return 1;
 
-    if (ctxA.isEnrolled && ctxB.isLeft) return -1;
-    if (ctxA.isLeft && ctxB.isEnrolled) return 1;
+    if (ctxA.isEnrolled && !ctxB.isEnrolled) return -1;
+    if (!ctxA.isEnrolled && ctxB.isEnrolled) return 1;
 
     return 0;
   });
@@ -256,7 +282,6 @@ export const CoachingView = ({
         </div>
 
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          {/* Feature: Export Reports Modal Trigger */}
           <button
             onClick={() => setShowExportModal(true)}
             className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-100 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5"
@@ -335,42 +360,77 @@ export const CoachingView = ({
       {activeTab === 'roster' && (
         <div className="space-y-6">
           <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Class Filter</label>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Target Month</label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => {
+                    setSelectedMonth(e.target.value);
+                    onUpdateState({ selectedMonth: e.target.value });
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 font-bold text-slate-700 outline-none"
+                >
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i + 1} value={i + 1}>
+                      {new Date(0, i).toLocaleString('default', { month: 'long' })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Target Year</label>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => {
+                    setSelectedYear(e.target.value);
+                    onUpdateState({ selectedYear: e.target.value });
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 font-bold text-slate-700 outline-none"
+                >
+                  <option value={2025}>2025</option>
+                  <option value={2026}>2026</option>
+                  <option value={2027}>2027</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Class</label>
                 <select
                   value={selectedClassId}
                   onChange={(e) => handleClassChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 font-medium text-slate-700 outline-none"
                 >
-                  <option value="">All Classes (All Coaching Students)</option>
+                  <option value="">All Classes</option>
                   {classes.map(c => <option key={c.id} value={c.id}>{c.className}</option>)}
                 </select>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Subject Filter</label>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Subject</label>
                 <select
                   disabled={!selectedClassId}
                   value={selectedSubjectId}
                   onChange={(e) => handleSubjectChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 font-medium text-slate-700 outline-none disabled:opacity-50"
                 >
-                  <option value="">All Subjects in Class</option>
+                  <option value="">All Subjects</option>
                   {activeSubjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.teacherName})</option>)}
                 </select>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Enrollment Status Filter</label>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Status Filter</label>
                 <select
                   value={enrollmentStatusFilter}
                   onChange={(e) => handleStatusFilterChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 font-medium text-slate-700 outline-none"
                 >
-                  <option value="all">All Students (Enrolled & Left)</option>
-                  <option value="enrolled">Active Enrolled Only</option>
-                  <option value="left">Left / Un-enrolled Only</option>
+                  <option value="all">All Students</option>
+                  <option value="enrolled">Active Enrolled</option>
+                  <option value="left">Left / Un-enrolled</option>
+                  <option value="not_enrolled">Not Enrolled Yet</option>
                 </select>
               </div>
             </div>
@@ -394,13 +454,12 @@ export const CoachingView = ({
 
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
             <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800 text-sm">
-                {!selectedClassId 
-                  ? "All Coaching Students" 
-                  : `Filtered: ${selectedClass?.className} ${selectedSubjectId ? `(${activeSubjects.find(s=>s.id===selectedSubjectId)?.name})` : ''}`}
+              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <Calendar size={16} className="text-indigo-600" />
+                Roster for {new Date(0, selectedMonth - 1).toLocaleString('default', { month: 'long' })} {selectedYear}
               </h3>
               <span className="text-xs font-bold text-slate-600 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-xs">
-                Enrolled Count: {sortedStudents.length} Student(s)
+                Count: {sortedStudents.length} Student(s)
               </span>
             </div>
 
@@ -410,14 +469,15 @@ export const CoachingView = ({
                   <tr>
                     <th className="px-5 py-4 font-bold">Student Name</th>
                     <th className="px-5 py-4 font-bold">Contact</th>
-                    <th className="px-5 py-4 font-bold">Enrollment Status</th>
-                    {selectedClassId && <th className="px-5 py-4 font-bold">Fee Status (Current Month)</th>}
+                    <th className="px-5 py-4 font-bold">Enrolled Class-Subjects</th>
+                    <th className="px-5 py-4 font-bold">Status in {selectedMonth}/{selectedYear}</th>
+                    {selectedClassId && <th className="px-5 py-4 font-bold">Fee Status ({selectedMonth}/{selectedYear})</th>}
                     <th className="px-5 py-4 font-bold text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {sortedStudents.map((student) => {
-                    const { matchingEnrollment, isEnrolled, isLeft, feeRecord, feeStatus, isLeftWithPendingFee } = getStudentContext(student);
+                    const { matchingEnrollment, isEnrolled, isLeft, isNotEnrolledYet, feeRecord, feeStatus, isLeftWithPendingFee } = getStudentContext(student);
                     const amountPaid = feeRecord?.amountPaid || 0;
                     const amountLeft = matchingEnrollment ? Math.max(0, matchingEnrollment.monthlyFee - amountPaid) : 0;
 
@@ -427,6 +487,8 @@ export const CoachingView = ({
                         className={`transition-all ${
                           isLeftWithPendingFee 
                             ? 'bg-amber-50/80 border-2 border-amber-400/80 shadow-md animate-pulse'
+                            : isNotEnrolledYet
+                            ? 'bg-slate-50/40 opacity-50'
                             : isLeft 
                             ? 'bg-slate-50/60 opacity-75' 
                             : 'hover:bg-slate-50/70'
@@ -444,7 +506,7 @@ export const CoachingView = ({
                                 {student.name}
                                 {isLeftWithPendingFee && (
                                   <span className="text-[10px] bg-amber-500 text-white font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider">
-                                    Pending Balance After Leaving
+                                    Pending Balance
                                   </span>
                                 )}
                               </p>
@@ -456,18 +518,36 @@ export const CoachingView = ({
                         <td className="px-5 py-3 font-medium text-slate-600 text-xs">
                           {student.phone}
                         </td>
+
+                        <td className="px-5 py-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            {student.enrollments?.map(enr => (
+                              <span key={enr.enrollmentId} className="px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-700">
+                                {enr.className} ({enr.subjectName})
+                              </span>
+                            ))}
+                          </div>
+                        </td>
                         
                         <td className="px-5 py-3">
-                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                            isEnrolled ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-red-50 text-red-600 border border-red-100'
-                          }`}>
-                            {isEnrolled ? '✓ Enrolled' : 'Left / Un-enrolled'}
-                          </span>
+                          {isNotEnrolledYet ? (
+                            <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                              ⚪ Not Enrolled Yet
+                            </span>
+                          ) : (
+                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                              isEnrolled ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-red-50 text-red-600 border border-red-100'
+                            }`}>
+                              {isEnrolled ? '✓ Enrolled' : 'Left / Un-enrolled'}
+                            </span>
+                          )}
                         </td>
 
                         {selectedClassId && (
                           <td className="px-5 py-3">
-                            {!selectedSubjectId ? (
+                            {isNotEnrolledYet ? (
+                              <span className="text-[11px] text-slate-400 italic">N/A</span>
+                            ) : !selectedSubjectId ? (
                               <span className="text-[11px] text-slate-400 font-medium italic">Select Subject to track fee</span>
                             ) : (
                               <button
@@ -487,18 +567,7 @@ export const CoachingView = ({
                           </td>
                         )}
 
-                        <td className="px-5 py-3 text-right flex items-center justify-end gap-2">
-                          {/* Download PDF Receipt Trigger */}
-                          {feeRecord && matchingEnrollment && (
-                            <button
-                              onClick={() => downloadPaymentReceiptPDF({ coaching, student, enrollment: matchingEnrollment, feeRecord })}
-                              className="p-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg text-slate-500 transition-colors"
-                              title="Download Payment Receipt (PDF)"
-                            >
-                              <FileText size={14} />
-                            </button>
-                          )}
-
+                        <td className="px-5 py-3 text-right">
                           <button
                             onClick={() => onOpenStudentDetails(student)}
                             className="px-4 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg text-xs font-bold transition-all shadow-xs"
@@ -645,6 +714,9 @@ export const CoachingView = ({
             <h3 className="font-bold text-slate-800 text-base">Update Fee Record</h3>
             <p className="text-xs text-slate-500">
               {activeFeeModal.student.name} — {activeFeeModal.enrollment.className} ({activeFeeModal.enrollment.subjectName})
+            </p>
+            <p className="text-[11px] font-bold text-indigo-600">
+              Target Month: {selectedMonth}/{selectedYear}
             </p>
 
             <form onSubmit={handleSaveFeeModal} className="space-y-3">
