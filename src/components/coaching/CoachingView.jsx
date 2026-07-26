@@ -3,24 +3,38 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, getDocs, addDoc, updateDoc, setDoc, doc } from 'firebase/firestore';
 import { RemindersTab } from './RemindersTab';
-import { Plus, BookOpen, Bell, ArrowLeft, AlertCircle, Search, X, Trash2 } from 'lucide-react';
+import { ExportReportModal } from './ExportReportModal';
+import { downloadPaymentReceiptPDF } from '../../utils/exportUtils';
+import { 
+  Plus, BookOpen, Bell, ArrowLeft, Search, X, 
+  Layers, Bookmark, ChevronRight, AlertCircle, Users, Download, FileText 
+} from 'lucide-react';
 
-export const CoachingView = ({ coaching, initialState = {}, onUpdateState, onOpenAddStudent, onOpenStudentDetails, onGoBack }) => {
+export const CoachingView = ({ 
+  coaching, 
+  initialState = {}, 
+  onUpdateState, 
+  onOpenAddStudent, 
+  onOpenClassDetails,
+  onOpenSubjectDetails,
+  onOpenStudentDetails, 
+  onGoBack 
+}) => {
   const [activeTab, setActiveTab] = useState(initialState.activeTab || 'roster'); 
   const [selectedClassId, setSelectedClassId] = useState(initialState.selectedClassId || '');
   const [selectedSubjectId, setSelectedSubjectId] = useState(initialState.selectedSubjectId || '');
   const [enrollmentStatusFilter, setEnrollmentStatusFilter] = useState(initialState.enrollmentStatusFilter || 'all');
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Quick Fee & Export Modal States
+  const [activeFeeModal, setActiveFeeModal] = useState(null);
+  const [feeModalForm, setFeeModalForm] = useState({ status: 'paid', amountPaid: 0, remark: '' });
+  const [showExportModal, setShowExportModal] = useState(false);
+
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [feeRecords, setFeeRecords] = useState({});
 
-  // Custom Fee Update Modal State (Replaces browser prompts)
-  const [activeFeeModal, setActiveFeeModal] = useState(null); // { student, enrollment, currentRecord }
-  const [feeModalForm, setFeeModalForm] = useState({ status: 'paid', amountPaid: 0, remark: '' });
-
-  // Add Class & Add Subject Modals
   const [showAddClassModal, setShowAddClassModal] = useState(false);
   const [showAddSubjectModal, setShowAddSubjectModal] = useState(false);
   const [newClassName, setNewClassName] = useState('');
@@ -76,7 +90,6 @@ export const CoachingView = ({ coaching, initialState = {}, onUpdateState, onOpe
     onUpdateState({ activeTab: tab });
   };
 
-  // 2. Open Custom Modal for Fee Updates (No window.prompt)
   const openQuickFeeModal = (student, enrollment) => {
     const record = feeRecords[`${student.id}_${enrollment.enrollmentId}`] || {};
     const defaultStatus = record.status || 'unpaid';
@@ -153,21 +166,23 @@ export const CoachingView = ({ coaching, initialState = {}, onUpdateState, onOpe
   const selectedClass = classes.find(c => c.id === selectedClassId);
   const activeSubjects = selectedClass?.subjects || [];
 
-  // Resolved Context Per Student
   const getStudentContext = (student) => {
-    const matchingEnrollments = student.enrollments?.filter(e => 
+    const enrollments = student.enrollments || [];
+
+    const matchingEnrollment = enrollments.find(e => 
       (!selectedClassId || e.classId === selectedClassId) &&
       (!selectedSubjectId || e.subjectId === selectedSubjectId)
-    ) || [];
+    );
 
-    const hasActiveEnrollment = matchingEnrollments.some(e => e.status === 'active');
-    const hasLeftEnrollment = matchingEnrollments.some(e => e.status === 'unassigned');
+    const isEnrolled = selectedClassId 
+      ? enrollments.some(e => e.classId === selectedClassId && e.status === 'active')
+      : enrollments.some(e => e.status === 'active');
 
-    const isEnrolled = selectedClassId ? hasActiveEnrollment : student.enrollments?.some(e => e.status === 'active');
-    const isLeft = selectedClassId ? hasLeftEnrollment : student.enrollments?.every(e => e.status === 'unassigned');
+    const isLeft = selectedClassId
+      ? enrollments.some(e => e.classId === selectedClassId && e.status === 'unassigned')
+      : enrollments.length > 0 && enrollments.every(e => e.status === 'unassigned');
 
-    // Fee calculations
-    const primaryEnrollment = matchingEnrollments[0] || student.enrollments?.[0];
+    const primaryEnrollment = matchingEnrollment || enrollments[0];
     const feeRecord = primaryEnrollment ? feeRecords[`${student.id}_${primaryEnrollment.enrollmentId}`] : null;
     const feeStatus = feeRecord?.status || 'unpaid';
     const hasPendingFee = feeStatus === 'unpaid' || feeStatus === 'partially_paid';
@@ -177,16 +192,12 @@ export const CoachingView = ({ coaching, initialState = {}, onUpdateState, onOpe
     return { matchingEnrollment: primaryEnrollment, isEnrolled, isLeft, feeRecord, feeStatus, hasPendingFee, isLeftWithPendingFee };
   };
 
-  // 1. Filter Logic across All Students
   const filteredStudents = students.filter(student => {
-    const { isEnrolled, isLeft } = getStudentContext(student);
-
-    // 5. Search Bar Filter by Name or Phone
-    const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          student.phone.includes(searchTerm);
+    const matchesSearch = !searchTerm || 
+                          student.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          student.phone?.includes(searchTerm);
     if (!matchesSearch) return false;
 
-    // Filter by Class/Subject when active
     if (selectedClassId) {
       const hasClassMatch = student.enrollments?.some(e => 
         e.classId === selectedClassId &&
@@ -195,14 +206,13 @@ export const CoachingView = ({ coaching, initialState = {}, onUpdateState, onOpe
       if (!hasClassMatch) return false;
     }
 
-    // 1. Enrollment status filter works for both all coaching and filtered views
-    if (enrollmentStatusFilter === 'enrolled') return isEnrolled;
-    if (enrollmentStatusFilter === 'left') return isLeft;
+    const { isEnrolled, isLeft } = getStudentContext(student);
+    if (enrollmentStatusFilter === 'enrolled' && !isEnrolled) return false;
+    if (enrollmentStatusFilter === 'left' && !isLeft) return false;
 
     return true;
   });
 
-  // Priority Sorting Logic
   const sortedStudents = [...filteredStudents].sort((a, b) => {
     const ctxA = getStudentContext(a);
     const ctxB = getStudentContext(b);
@@ -216,7 +226,6 @@ export const CoachingView = ({ coaching, initialState = {}, onUpdateState, onOpe
     return 0;
   });
 
-  // 4. Calculate total pending count for Reminders Head Badge
   const pendingRemindersCount = students.reduce((acc, student) => {
     const pendingEnrs = student.enrollments?.filter(enr => {
       const key = `${student.id}_${enr.enrollmentId}`;
@@ -226,130 +235,94 @@ export const CoachingView = ({ coaching, initialState = {}, onUpdateState, onOpe
     return acc + (pendingEnrs?.length || 0);
   }, 0);
 
+  const totalSubjectsCount = classes.reduce((sum, c) => sum + (c.subjects?.length || 0), 0);
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {/* Back Button */}
       <div className="flex items-center justify-between">
         <button
           onClick={onGoBack}
-          className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs"
+          className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs"
         >
           <ArrowLeft size={16} /> Go Back
         </button>
       </div>
 
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl border border-slate-100 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm">
+      <div className="bg-white rounded-3xl border border-slate-200/70 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xs">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">{coaching.name}</h1>
-          <p className="text-xs text-slate-500 mt-1">Owner: {coaching.ownerName} | Location: {coaching.address}</p>
+          <h1 className="text-2xl font-extrabold text-slate-800">{coaching.name}</h1>
+          <p className="text-xs text-slate-500 font-medium mt-1">Owner: {coaching.ownerName} | Location: {coaching.address}</p>
         </div>
 
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
+          {/* Feature: Export Reports Modal Trigger */}
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-100 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5"
+          >
+            <Download size={14} /> Export Reports
+          </button>
           <button
             onClick={() => setShowAddClassModal(true)}
-            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs transition-all"
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-all"
           >
             + Add Class
           </button>
           <button
             onClick={() => {
-              setTargetClassForSubject(selectedClassId || classes[0]?.id || '');
+              setTargetClassForSubject(classes[0]?.id || '');
               setShowAddSubjectModal(true);
             }}
-            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs transition-all"
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-all"
           >
             + Add Subject
           </button>
           <button
             onClick={onOpenAddStudent}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-xs shadow-md shadow-indigo-100 flex items-center gap-1.5 transition-all"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-100 flex items-center gap-1.5 transition-all"
           >
             <Plus size={16} /> Add Student
           </button>
         </div>
       </div>
 
-      {/* Filters & Search Controls */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Class Filter</label>
-            <select
-              value={selectedClassId}
-              onChange={(e) => handleClassChange(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 font-medium text-slate-700 outline-none"
-            >
-              <option value="">All Classes (All Coaching Students)</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.className}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Subject Filter</label>
-            <select
-              disabled={!selectedClassId}
-              value={selectedSubjectId}
-              onChange={(e) => handleSubjectChange(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 font-medium text-slate-700 outline-none disabled:opacity-50"
-            >
-              <option value="">All Subjects in Class</option>
-              {activeSubjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.teacherName})</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Enrollment Status Filter</label>
-            <select
-              value={enrollmentStatusFilter}
-              onChange={(e) => handleStatusFilterChange(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 font-medium text-slate-700 outline-none"
-            >
-              <option value="all">All Students (Enrolled & Left)</option>
-              <option value="enrolled">Active Enrolled Only</option>
-              <option value="left">Left / Un-enrolled Only</option>
-            </select>
-          </div>
-        </div>
-
-        {/* 5. Student Roster Search Bar */}
-        {activeTab === 'roster' && (
-          <div className="relative">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search students by name or phone number..."
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
-            />
-            {searchTerm && (
-              <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <X size={14} />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Tabs Switcher with Requirement 4 Head Counter Badge */}
-      <div className="flex gap-2 border-b border-slate-200 pb-2">
+      {/* Navigation Sub-Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
         <button
           onClick={() => handleTabChange('roster')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
             activeTab === 'roster' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-100'
           }`}
         >
-          <BookOpen size={16} /> Enrolled Students Roster
+          <BookOpen size={16} /> Student Roster
         </button>
+
+        <button
+          onClick={() => handleTabChange('classes')}
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+            activeTab === 'classes' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-100'
+          }`}
+        >
+          <Layers size={16} /> Classes
+        </button>
+
+        <button
+          onClick={() => handleTabChange('subjects')}
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+            activeTab === 'subjects' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-100'
+          }`}
+        >
+          <Bookmark size={16} /> Subjects
+        </button>
+
         <button
           onClick={() => handleTabChange('reminders')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
             activeTab === 'reminders' ? 'bg-amber-50 text-amber-700' : 'text-slate-500 hover:bg-slate-100'
           }`}
         >
           <Bell size={16} /> Fee Reminders 
-          {/* 4. Head Count Badge */}
           {pendingRemindersCount > 0 && (
             <span className="px-2 py-0.5 bg-amber-500 text-white font-extrabold text-[10px] rounded-full shadow-xs">
               {pendingRemindersCount}
@@ -358,135 +331,314 @@ export const CoachingView = ({ coaching, initialState = {}, onUpdateState, onOpe
         </button>
       </div>
 
-      {/* Roster & Table Layout */}
-      {activeTab === 'reminders' ? (
-        <RemindersTab coachingId={coaching.id} />
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          {/* 6. Header showing count of enrolled / filtered students */}
-          <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-            <h3 className="font-bold text-slate-800 text-sm">
-              {!selectedClassId 
-                ? "All Coaching Students" 
-                : `Filtered: ${selectedClass?.className} ${selectedSubjectId ? `(${activeSubjects.find(s=>s.id===selectedSubjectId)?.name})` : ''}`}
-            </h3>
-            <span className="text-xs font-bold text-slate-600 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-xs">
-              Enrolled Count: {sortedStudents.length} Student(s)
-            </span>
+      {/* TAB 1: STUDENT ROSTER */}
+      {activeTab === 'roster' && (
+        <div className="space-y-6">
+          <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Class Filter</label>
+                <select
+                  value={selectedClassId}
+                  onChange={(e) => handleClassChange(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 font-medium text-slate-700 outline-none"
+                >
+                  <option value="">All Classes (All Coaching Students)</option>
+                  {classes.map(c => <option key={c.id} value={c.id}>{c.className}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Subject Filter</label>
+                <select
+                  disabled={!selectedClassId}
+                  value={selectedSubjectId}
+                  onChange={(e) => handleSubjectChange(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 font-medium text-slate-700 outline-none disabled:opacity-50"
+                >
+                  <option value="">All Subjects in Class</option>
+                  {activeSubjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.teacherName})</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Enrollment Status Filter</label>
+                <select
+                  value={enrollmentStatusFilter}
+                  onChange={(e) => handleStatusFilterChange(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs bg-slate-50 font-medium text-slate-700 outline-none"
+                >
+                  <option value="all">All Students (Enrolled & Left)</option>
+                  <option value="enrolled">Active Enrolled Only</option>
+                  <option value="left">Left / Un-enrolled Only</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="relative">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search students by name or phone number..."
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
+              />
+              {searchTerm && (
+                <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-white border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
-                <tr>
-                  <th className="px-5 py-4 font-bold">Student Name</th>
-                  <th className="px-5 py-4 font-bold">Contact</th>
-                  <th className="px-5 py-4 font-bold">Enrollment Status</th>
-                  {selectedClassId && <th className="px-5 py-4 font-bold">Fee Status (Current Month)</th>}
-                  <th className="px-5 py-4 font-bold text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {sortedStudents.map((student) => {
-                  const { matchingEnrollment, isEnrolled, isLeft, feeRecord, feeStatus, isLeftWithPendingFee } = getStudentContext(student);
-                  const amountPaid = feeRecord?.amountPaid || 0;
-                  const amountLeft = matchingEnrollment ? Math.max(0, matchingEnrollment.monthlyFee - amountPaid) : 0;
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+              <h3 className="font-bold text-slate-800 text-sm">
+                {!selectedClassId 
+                  ? "All Coaching Students" 
+                  : `Filtered: ${selectedClass?.className} ${selectedSubjectId ? `(${activeSubjects.find(s=>s.id===selectedSubjectId)?.name})` : ''}`}
+              </h3>
+              <span className="text-xs font-bold text-slate-600 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-xs">
+                Enrolled Count: {sortedStudents.length} Student(s)
+              </span>
+            </div>
 
-                  return (
-                    <tr 
-                      key={student.id} 
-                      className={`transition-all ${
-                        isLeftWithPendingFee 
-                          ? 'bg-amber-50/80 border-2 border-amber-400/80 shadow-md animate-pulse'
-                          : isLeft 
-                          ? 'bg-slate-50/60 opacity-75' 
-                          : 'hover:bg-slate-50/70'
-                      }`}
-                    >
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-2">
-                          {isLeftWithPendingFee && (
-                            <span className="text-amber-600 font-bold" title="Student left class with pending fee balance!">
-                              <AlertCircle size={16} />
-                            </span>
-                          )}
-                          <div>
-                            <p className="font-bold text-slate-800 flex items-center gap-1.5">
-                              {student.name}
-                              {isLeftWithPendingFee && (
-                                <span className="text-[10px] bg-amber-500 text-white font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider">
-                                  Pending Balance After Leaving
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-xs text-slate-400 mt-0.5">{student.email || 'No email'}</p>
-                          </div>
-                        </div>
-                      </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead className="bg-white border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
+                  <tr>
+                    <th className="px-5 py-4 font-bold">Student Name</th>
+                    <th className="px-5 py-4 font-bold">Contact</th>
+                    <th className="px-5 py-4 font-bold">Enrollment Status</th>
+                    {selectedClassId && <th className="px-5 py-4 font-bold">Fee Status (Current Month)</th>}
+                    <th className="px-5 py-4 font-bold text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {sortedStudents.map((student) => {
+                    const { matchingEnrollment, isEnrolled, isLeft, feeRecord, feeStatus, isLeftWithPendingFee } = getStudentContext(student);
+                    const amountPaid = feeRecord?.amountPaid || 0;
+                    const amountLeft = matchingEnrollment ? Math.max(0, matchingEnrollment.monthlyFee - amountPaid) : 0;
 
-                      <td className="px-5 py-3 font-medium text-slate-600 text-xs">
-                        {student.phone}
-                      </td>
-                      
-                      {/* Enrollment Badge */}
-                      <td className="px-5 py-3">
-                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                          isEnrolled ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-red-50 text-red-600 border border-red-100'
-                        }`}>
-                          {isEnrolled ? '✓ Enrolled' : 'Left / Un-enrolled'}
-                        </span>
-                      </td>
-
-                      {/* Fee Status Badge Trigger */}
-                      {selectedClassId && (
+                    return (
+                      <tr 
+                        key={student.id} 
+                        className={`transition-all ${
+                          isLeftWithPendingFee 
+                            ? 'bg-amber-50/80 border-2 border-amber-400/80 shadow-md animate-pulse'
+                            : isLeft 
+                            ? 'bg-slate-50/60 opacity-75' 
+                            : 'hover:bg-slate-50/70'
+                        }`}
+                      >
                         <td className="px-5 py-3">
-                          {!selectedSubjectId ? (
-                            <span className="text-[11px] text-slate-400 font-medium italic">Select Subject to track fee</span>
-                          ) : (
+                          <div className="flex items-center gap-2">
+                            {isLeftWithPendingFee && (
+                              <span className="text-amber-600 font-bold" title="Student left class with pending fee balance!">
+                                <AlertCircle size={16} />
+                              </span>
+                            )}
+                            <div>
+                              <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                                {student.name}
+                                {isLeftWithPendingFee && (
+                                  <span className="text-[10px] bg-amber-500 text-white font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                                    Pending Balance After Leaving
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-xs text-slate-400 mt-0.5">{student.email || 'No email'}</p>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-3 font-medium text-slate-600 text-xs">
+                          {student.phone}
+                        </td>
+                        
+                        <td className="px-5 py-3">
+                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                            isEnrolled ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-red-50 text-red-600 border border-red-100'
+                          }`}>
+                            {isEnrolled ? '✓ Enrolled' : 'Left / Un-enrolled'}
+                          </span>
+                        </td>
+
+                        {selectedClassId && (
+                          <td className="px-5 py-3">
+                            {!selectedSubjectId ? (
+                              <span className="text-[11px] text-slate-400 font-medium italic">Select Subject to track fee</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => openQuickFeeModal(student, matchingEnrollment)}
+                                className={`px-3 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                                  feeStatus === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' :
+                                  feeStatus === 'partially_paid' ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' :
+                                  'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                                }`}
+                              >
+                                {feeStatus === 'paid' && 'Paid'}
+                                {feeStatus === 'partially_paid' && `Partial (₹${amountLeft} left)`}
+                                {feeStatus === 'unpaid' && 'Unpaid'}
+                              </button>
+                            )}
+                          </td>
+                        )}
+
+                        <td className="px-5 py-3 text-right flex items-center justify-end gap-2">
+                          {/* Download PDF Receipt Trigger */}
+                          {feeRecord && matchingEnrollment && (
                             <button
-                              type="button"
-                              onClick={() => openQuickFeeModal(student, matchingEnrollment)}
-                              className={`px-3 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
-                                feeStatus === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' :
-                                feeStatus === 'partially_paid' ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' :
-                                'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
-                              }`}
+                              onClick={() => downloadPaymentReceiptPDF({ coaching, student, enrollment: matchingEnrollment, feeRecord })}
+                              className="p-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg text-slate-500 transition-colors"
+                              title="Download Payment Receipt (PDF)"
                             >
-                              {feeStatus === 'paid' && 'Paid'}
-                              {feeStatus === 'partially_paid' && `Partial (₹${amountLeft} left)`}
-                              {feeStatus === 'unpaid' && 'Unpaid'}
+                              <FileText size={14} />
                             </button>
                           )}
-                        </td>
-                      )}
 
-
-                      <td className="px-5 py-3 text-right">
-                        <div className="flex justify-end items-center gap-2">
                           <button
                             onClick={() => onOpenStudentDetails(student)}
                             className="px-4 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg text-xs font-bold transition-all shadow-xs"
                           >
                             View Profile
                           </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
 
-            {sortedStudents.length === 0 && (
-              <div className="p-8 text-center text-slate-400 text-sm font-medium">
-                No students match the current search or filters.
-              </div>
-            )}
+              {sortedStudents.length === 0 && (
+                <div className="p-8 text-center text-slate-400 text-sm font-medium">
+                  No students match the current search or filters.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* 2. Custom Quick Fee Modal (Replaces browser alerts/prompts) */}
+      {/* TAB 2: CLASSES GRID */}
+      {activeTab === 'classes' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+            <h3 className="font-extrabold text-slate-800 text-sm">Classes Overview</h3>
+            <span className="text-xs font-bold bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full border border-indigo-100">
+              Total Classes: {classes.length}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {classes.map((cls) => {
+              const classStudents = students.filter(s => s.enrollments?.some(e => e.classId === cls.id && e.status === 'active'));
+              
+              return (
+                <div
+                  key={cls.id}
+                  onClick={() => onOpenClassDetails(cls.id)}
+                  className="group relative bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs hover:shadow-xl hover:border-indigo-200 transition-all cursor-pointer hover:-translate-y-1 flex flex-col justify-between overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-28 h-28 bg-indigo-50/50 rounded-full blur-xl group-hover:bg-indigo-100/60 transition-colors pointer-events-none" />
+
+                  <div className="space-y-3 relative z-10">
+                    <div className="flex justify-between items-center">
+                      <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                        <Layers size={20} />
+                      </div>
+                      <ChevronRight size={18} className="text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                    </div>
+
+                    <div>
+                      <h3 className="font-extrabold text-slate-800 text-lg group-hover:text-indigo-600 transition-colors">{cls.className}</h3>
+                      <p className="text-xs text-slate-500 mt-1">{cls.subjects?.length || 0} Subject(s) offered</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-600 relative z-10">
+                    <span className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
+                      <Users size={14} /> {classStudents.length} Active Students
+                    </span>
+                    <span className="text-[11px] text-slate-400 group-hover:text-slate-600 transition-colors">View Details →</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {classes.length === 0 && (
+            <div className="bg-white rounded-3xl border p-12 text-center text-slate-400 text-sm">
+              No classes created yet. Click "+ Add Class" to get started.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: SUBJECTS GRID */}
+      {activeTab === 'subjects' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+            <h3 className="font-extrabold text-slate-800 text-sm">Subjects Overview</h3>
+            <span className="text-xs font-bold bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full border border-indigo-100">
+              Total Subjects: {totalSubjectsCount}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {classes.flatMap(cls => (cls.subjects || []).map(sub => ({ ...sub, classId: cls.id, className: cls.className }))).map((subject) => {
+              const enrolledCount = students.filter(s => 
+                s.enrollments?.some(e => e.subjectId === subject.id && e.status === 'active')
+              ).length;
+
+              return (
+                <div
+                  key={subject.id}
+                  onClick={() => onOpenSubjectDetails({ classId: subject.classId, subjectId: subject.id })}
+                  className="group relative bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs hover:shadow-xl hover:border-indigo-200 transition-all cursor-pointer hover:-translate-y-1 flex flex-col justify-between overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 w-28 h-28 bg-indigo-50/50 rounded-full blur-xl group-hover:bg-indigo-100/60 transition-colors pointer-events-none" />
+
+                  <div className="space-y-3 relative z-10">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-extrabold uppercase bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg">
+                        Class: {subject.className}
+                      </span>
+
+                      <ChevronRight size={18} className="text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                    </div>
+
+                    <div>
+                      <h4 className="font-extrabold text-slate-800 text-lg group-hover:text-indigo-600 transition-colors">{subject.name}</h4>
+                      <p className="text-xs text-slate-500 mt-0.5">Teacher: {subject.teacherName}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-600 relative z-10">
+                    <span className="text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
+                      <Users size={14} className="inline mr-1" /> {enrolledCount} Active Enrolled
+                    </span>
+                    <span className="text-[11px] text-slate-400 group-hover:text-slate-600 transition-colors">View Details →</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {totalSubjectsCount === 0 && (
+            <div className="bg-white rounded-3xl border p-12 text-center text-slate-400 text-sm">
+              No subjects created yet. Click "+ Add Subject" to create one.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: REMINDERS TAB */}
+      {activeTab === 'reminders' && <RemindersTab coachingId={coaching.id} />}
+
+      {/* Quick Fee Modal */}
       {activeFeeModal && (
         <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
@@ -550,10 +702,18 @@ export const CoachingView = ({ coaching, initialState = {}, onUpdateState, onOpe
         </div>
       )}
 
+      {/* Export Report Modal */}
+      {showExportModal && (
+        <ExportReportModal
+          coaching={coaching}
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
+
       {/* Add Class Modal */}
       {showAddClassModal && (
         <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
             <h3 className="font-bold text-slate-800 text-base">Add Class</h3>
             <form onSubmit={handleAddClass} className="space-y-3">
               <input
@@ -576,7 +736,7 @@ export const CoachingView = ({ coaching, initialState = {}, onUpdateState, onOpe
       {/* Add Subject Modal */}
       {showAddSubjectModal && (
         <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl">
             <h3 className="font-bold text-slate-800 text-base">Add Subject</h3>
             <form onSubmit={handleAddSubject} className="space-y-3">
               <div>

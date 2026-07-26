@@ -8,6 +8,8 @@ import { AuthPage } from './pages/AuthPage';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AddStudentPage } from './pages/AddStudentPage';
 import { StudentDetailsPage } from './pages/StudentDetailsPage';
+import { ClassDetailsPage } from './pages/ClassDetailsPage';
+import { SubjectDetailsPage } from './pages/SubjectDetailsPage';
 import { CoachingView } from './components/coaching/CoachingView';
 import { TeacherDashboard } from './components/dashboard/TeacherDashboard';
 
@@ -18,7 +20,7 @@ export default function App() {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Navigation History Stack with Preserved State
+  // Stack-based router history with preserved individual screen states
   const [navigationHistory, setNavigationHistory] = useState([
     { screen: 'dashboard', state: {} }
   ]);
@@ -45,12 +47,12 @@ export default function App() {
     setNavigationHistory([{ screen: 'dashboard', state: {} }]);
   };
 
-  // Push a new route while preserving current page state
+  // Push new screen state into history
   const navigateTo = (screen, state = {}) => {
     setNavigationHistory(prev => [...prev, { screen, state }]);
   };
 
-  // Update state of the current route without pushing a new history entry
+  // Update current screen state in-place
   const updateCurrentState = (newState) => {
     setNavigationHistory(prev => {
       const updated = [...prev];
@@ -63,7 +65,7 @@ export default function App() {
     });
   };
 
-  // Stateful Go Back Logic
+  // Step-by-step Go Back handler
   const goBack = () => {
     if (navigationHistory.length > 1) {
       setNavigationHistory(prev => prev.slice(0, -1));
@@ -99,7 +101,6 @@ export default function App() {
     );
   }
 
-  // Helper variables for breadcrumbs
   const selectedCoaching = currentNav.state?.coaching;
   const selectedStudent = currentNav.state?.student;
 
@@ -130,11 +131,10 @@ export default function App() {
         </div>
       </header>
 
-      {/* Navigation Bar with Smart Go Back Button & Breadcrumbs */}
+      {/* Navigation Header with Universal Go Back */}
       <div className="bg-white border-b border-slate-100 py-2.5 shadow-xs sticky top-[57px] z-30">
         <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-            {/* Go Back Button */}
             {navigationHistory.length > 1 && (
               <button
                 onClick={goBack}
@@ -160,6 +160,20 @@ export default function App() {
               </>
             )}
 
+            {currentNav.screen === 'classDetails' && (
+              <>
+                <ChevronRight size={12} className="text-slate-300" />
+                <span className="text-indigo-600 font-bold">Class Details</span>
+              </>
+            )}
+
+            {currentNav.screen === 'subjectDetails' && (
+              <>
+                <ChevronRight size={12} className="text-slate-300" />
+                <span className="text-indigo-600 font-bold">Subject Details</span>
+              </>
+            )}
+
             {currentNav.screen === 'addStudent' && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
@@ -177,13 +191,18 @@ export default function App() {
         </div>
       </div>
 
-      {/* Screen Router */}
+      {/* Router Screen Rendering */}
       <main className="p-6">
         {currentNav.screen === 'dashboard' && (
           <TeacherDashboard 
             userId={currentUser.uid} 
             onSelectCoaching={(coaching) => {
-              navigateTo('coaching', { coaching, selectedClassId: '', selectedSubjectId: '', activeTab: 'roster' });
+              navigateTo('coaching', { 
+                coaching, 
+                selectedClassId: '', 
+                selectedSubjectId: '', 
+                activeTab: 'roster'
+              });
             }} 
           />
         )}
@@ -194,8 +213,31 @@ export default function App() {
             initialState={currentNav.state}
             onUpdateState={updateCurrentState}
             onOpenAddStudent={() => navigateTo('addStudent', { coaching: selectedCoaching })}
+            onOpenClassDetails={(classId) => navigateTo('classDetails', { coaching: selectedCoaching, classId })}
+            onOpenSubjectDetails={({ classId, subjectId }) => navigateTo('subjectDetails', { coaching: selectedCoaching, classId, subjectId })}
             onOpenStudentDetails={(student) => navigateTo('studentDetails', { coaching: selectedCoaching, student })}
             onGoBack={goBack}
+          />
+        )}
+
+        {currentNav.screen === 'classDetails' && selectedCoaching && (
+          <ClassDetailsPage
+            coachingId={selectedCoaching.id}
+            classId={currentNav.state.classId}
+            onBack={goBack}
+            onOpenStudentDetails={(student) => navigateTo('studentDetails', { coaching: selectedCoaching, student })}
+            onOpenSubjectDetails={({ classId, subjectId }) => navigateTo('subjectDetails', { coaching: selectedCoaching, classId, subjectId })}
+          />
+        )}
+
+        {currentNav.screen === 'subjectDetails' && selectedCoaching && (
+          <SubjectDetailsPage
+            coachingId={selectedCoaching.id}
+            classId={currentNav.state.classId}
+            subjectId={currentNav.state.subjectId}
+            onBack={goBack}
+            onOpenStudentDetails={(student) => navigateTo('studentDetails', { coaching: selectedCoaching, student })}
+            onOpenClassDetails={(classId) => navigateTo('classDetails', { coaching: selectedCoaching, classId })}
           />
         )}
 
