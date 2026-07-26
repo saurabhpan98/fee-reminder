@@ -4,13 +4,12 @@ import { db } from '../firebase';
 import { doc, getDoc, updateDoc, setDoc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { 
   downloadPaymentReceiptPDF, 
-  downloadClassSubjectRangeReceiptPDF, 
-  downloadMultiMonthStudentReceiptPDF 
+  downloadClassSubjectRangeReceiptPDF 
 } from '../utils/exportUtils';
 import { 
   Phone, Mail, MapPin, Trash2, AlertTriangle, ArrowLeft, 
   UserCheck, UserMinus, DollarSign, Calendar, Edit3, X, Check,
-  BookOpen, Sparkles, Download, FileText
+  BookOpen, Sparkles, FileText
 } from 'lucide-react';
 
 export const StudentDetailsPage = ({ studentId, onBack }) => {
@@ -29,9 +28,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Top-Level Overall Statement Modal State
-  const [showOverallRangeModal, setShowOverallRangeModal] = useState(false);
-  
   // Per Class-Subject Specific Receipt Modal State
   const [receiptModal, setReceiptModal] = useState(null); // { enrollment }
   const [receiptMode, setReceiptMode] = useState('single'); // 'single' | 'range'
@@ -166,59 +162,29 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
     fetchStudent();
   };
 
-  // Download Overall Multi-Subject Fee Statement
-  const handleDownloadOverallMultiMonthReceipt = async () => {
-    if (!student || !coaching) return;
-
-    const feeSnap = await getDocs(query(collection(db, 'feeRecords'), where('studentId', '==', studentId)));
-    const allFeeRecords = feeSnap.docs.map(d => d.data());
-
-    const compiledMonthRecords = [];
-    const startVal = Number(startYear) * 12 + Number(startMonth);
-    const endVal = Number(endYear) * 12 + Number(endMonth);
-
-    student.enrollments?.forEach(enr => {
-      for (let y = Number(startYear); y <= Number(endYear); y++) {
-        const mStart = (y === Number(startYear)) ? Number(startMonth) : 1;
-        const mEnd = (y === Number(endYear)) ? Number(endMonth) : 12;
-
-        for (let m = mStart; m <= mEnd; m++) {
-          const currentVal = y * 12 + m;
-          if (currentVal >= startVal && currentVal <= endVal) {
-            const rec = allFeeRecords.find(f => f.enrollmentId === enr.enrollmentId && f.month === m && f.year === y);
-            compiledMonthRecords.push({
-              month: m,
-              year: y,
-              className: enr.className,
-              subjectName: enr.subjectName,
-              monthlyFee: enr.monthlyFee,
-              amountPaid: rec ? (rec.amountPaid || 0) : 0,
-              status: rec ? (rec.status || 'unpaid') : 'unpaid'
-            });
-          }
-        }
-      }
-    });
-
-    if (compiledMonthRecords.length === 0) {
-      alert('No fee records found for the selected month range.');
-      return;
-    }
-
-    const dateRangeText = `${startMonth}/${startYear} to ${endMonth}/${endYear}`;
-    downloadMultiMonthStudentReceiptPDF({ coaching, student, monthRecords: compiledMonthRecords, dateRangeText });
-    setShowOverallRangeModal(false);
+  // Helper: Checks if student was NOT enrolled during a given month/year
+  const isMonthBeforeEnrollment = (enrollment, month, year) => {
+    if (!enrollment || !enrollment.joinedAt) return false;
+    const joinDate = new Date(enrollment.joinedAt);
+    const selectedDate = new Date(Number(year), Number(month) - 1, 1);
+    const joinMonthStart = new Date(joinDate.getFullYear(), joinDate.getMonth(), 1);
+    return selectedDate < joinMonthStart;
   };
 
-  // Download Class-Subject Specific Receipt
+  // Download Class-Subject Specific Receipt with Validation
   const handleGenerateClassSubjectReceipt = async () => {
     if (!student || !coaching || !receiptModal) return;
     const { enrollment } = receiptModal;
 
-    const feeSnap = await getDocs(query(collection(db, 'feeRecords'), where('studentId', '==', studentId)));
-    const allFeeRecords = feeSnap.docs.map(d => d.data());
-
     if (receiptMode === 'single') {
+      // Validation Check
+      if (isMonthBeforeEnrollment(enrollment, singleMonth, singleYear)) {
+        alert("cannot download receipt for month when student was not enrolled");
+        return;
+      }
+
+      const feeSnap = await getDocs(query(collection(db, 'feeRecords'), where('studentId', '==', studentId)));
+      const allFeeRecords = feeSnap.docs.map(d => d.data());
       const rec = allFeeRecords.find(f => f.enrollmentId === enrollment.enrollmentId && f.month === Number(singleMonth) && f.year === Number(singleYear));
       
       downloadPaymentReceiptPDF({
@@ -227,6 +193,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
         classSubjectInfo: {
           className: enrollment.className,
           subjectName: enrollment.subjectName,
+          teacherName: enrollment.teacherName || 'N/A',
           monthlyFee: enrollment.monthlyFee,
           month: singleMonth,
           year: singleYear
@@ -234,9 +201,24 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
         feeRecord: rec || { status: 'unpaid', amountPaid: 0 }
       });
     } else {
-      const compiledRecords = [];
+      // Range Validation Check
       const startVal = Number(startYear) * 12 + Number(startMonth);
       const endVal = Number(endYear) * 12 + Number(endMonth);
+
+      if (startVal > endVal) {
+        alert("Invalid date range selection.");
+        return;
+      }
+
+      // Check if start date or any month in range is prior to enrollment
+      if (isMonthBeforeEnrollment(enrollment, startMonth, startYear)) {
+        alert("cannot download receipt for month when student was not enrolled");
+        return;
+      }
+
+      const feeSnap = await getDocs(query(collection(db, 'feeRecords'), where('studentId', '==', studentId)));
+      const allFeeRecords = feeSnap.docs.map(d => d.data());
+      const compiledRecords = [];
 
       for (let y = Number(startYear); y <= Number(endYear); y++) {
         const mStart = (y === Number(startYear)) ? Number(startMonth) : 1;
@@ -282,10 +264,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
   }
 
   const isPreEnrollment = (enr) => {
-    if (!enr || !enr.joinedAt) return false;
-    const joinDate = new Date(enr.joinedAt);
-    const selectedDate = new Date(selectedYear, selectedMonth - 1, 1);
-    return selectedDate < new Date(joinDate.getFullYear(), joinDate.getMonth(), 1);
+    return isMonthBeforeEnrollment(enr, selectedMonth, selectedYear);
   };
 
   const monthlyFee = activeModalEnrollment?.monthlyFee || 0;
@@ -295,8 +274,8 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-300">
       
-      {/* Top Bar Navigation & Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Top Bar Navigation */}
+      <div className="flex items-center justify-between">
         <button
           onClick={onBack}
           className="group flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-600 transition-all shadow-xs hover:shadow-md hover:-translate-x-0.5 active:translate-x-0"
@@ -305,17 +284,9 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
           Back to Roster
         </button>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowOverallRangeModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100 transition-all"
-          >
-            <Download size={14} /> Download Overall Fee Statement
-          </button>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
-            <BookOpen className="w-3.5 h-3.5" /> Student Management
-          </span>
-        </div>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+          <BookOpen className="w-3.5 h-3.5" /> Student Management
+        </span>
       </div>
 
       {/* Main Profile Card */}
@@ -325,7 +296,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
         {!isEditing ? (
           <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-start gap-4">
-              {/* Avatar Box */}
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white font-extrabold text-xl flex items-center justify-center shadow-md shadow-indigo-100 shrink-0">
                 {student.name.charAt(0).toUpperCase()}
               </div>
@@ -347,7 +317,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
               </div>
             </div>
 
-            {/* Profile Edit & Delete Buttons */}
             <div className="flex items-center gap-2 self-start md:self-auto pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 w-full md:w-auto justify-end">
               <button
                 onClick={() => setIsEditing(true)}
@@ -506,7 +475,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                     className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl text-slate-700 font-bold text-xs transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 shadow-xs"
                     title="Generate & Download Receipt"
                   >
-                    <FileText className="w-3.5 h-3.5 text-slate-500" /> Receipt
+                    <FileText className="w-3.5 h-3.5 text-slate-500" /> Download Receipt
                   </button>
 
                   {/* Interactive Re-enroll / Un-enroll Toggle Button */}
@@ -705,57 +674,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                   Save Status
                 </button>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Top-Level Overall Multi-Subject Statement Date Range Modal */}
-      {showOverallRangeModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-slate-100">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-                <Calendar size={16} className="text-indigo-600" /> Overall Statement Period
-              </h3>
-              <button onClick={() => setShowOverallRangeModal(false)} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">From (Month/Year)</label>
-                <div className="flex gap-2">
-                  <select value={startMonth} onChange={(e) => setStartMonth(e.target.value)} className="w-1/2 p-2 bg-slate-50 border rounded-xl text-xs font-bold">
-                    {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>Month {i + 1}</option>)}
-                  </select>
-                  <select value={startYear} onChange={(e) => setStartYear(e.target.value)} className="w-1/2 p-2 bg-slate-50 border rounded-xl text-xs font-bold">
-                    <option value={2025}>2025</option>
-                    <option value={2026}>2026</option>
-                    <option value={2027}>2027</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">To (Month/Year)</label>
-                <div className="flex gap-2">
-                  <select value={endMonth} onChange={(e) => setEndMonth(e.target.value)} className="w-1/2 p-2 bg-slate-50 border rounded-xl text-xs font-bold">
-                    {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>Month {i + 1}</option>)}
-                  </select>
-                  <select value={endYear} onChange={(e) => setEndYear(e.target.value)} className="w-1/2 p-2 bg-slate-50 border rounded-xl text-xs font-bold">
-                    <option value={2025}>2025</option>
-                    <option value={2026}>2026</option>
-                    <option value={2027}>2027</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-              <button onClick={() => setShowOverallRangeModal(false)} className="px-4 py-2 text-xs font-bold text-slate-500">Cancel</button>
-              <button onClick={handleDownloadOverallMultiMonthReceipt} className="px-4 py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow-md">
-                Download Full Statement
-              </button>
             </div>
           </div>
         </div>
