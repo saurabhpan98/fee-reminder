@@ -62,7 +62,7 @@ export const downloadPaymentReceiptPDF = ({ coaching, student, classSubjectInfo,
   doc.text(`${classSubjectInfo?.className || 'N/A'} (${classSubjectInfo?.subjectName || 'N/A'})`, 45, 66);
   doc.text(classSubjectInfo?.teacherName || 'N/A', 45, 72);
 
-  // Fee Breakdown
+  // Fee Breakdown Table
   const statusStr = feeRecord?.status === 'paid' ? 'Fully Paid' : feeRecord?.status === 'partially_paid' ? 'Partially Paid' : 'Unpaid';
   const amountPaid = Number(feeRecord?.amountPaid || 0);
   const monthlyFee = Number(classSubjectInfo?.monthlyFee || 0);
@@ -210,7 +210,79 @@ export const downloadClassSubjectRangeReceiptPDF = ({ coaching, student, classSu
   doc.save(`${student?.name?.replace(/\s+/g, '_')}_${classSubjectInfo?.subjectName}_Range_Receipt.pdf`);
 };
 
+/**
+ * 3. Export Coaching Summary CSV (Used by ExportReportModal)
+ */
+export const downloadFeeSummaryCSV = ({ coachingName, reportTitle, records }) => {
+  const headers = ['Student Name', 'Contact', 'Class Name', 'Subject Name', 'Month/Year', 'Monthly Fee (INR)', 'Amount Paid (INR)', 'Balance Due (INR)', 'Status', 'Remark'];
+
+  const rows = records.map(r => [
+    `"${r.studentName || ''}"`,
+    `"${r.phone || ''}"`,
+    `"${r.className || ''}"`,
+    `"${r.subjectName || ''}"`,
+    `"${r.month}/${r.year}"`,
+    r.monthlyFee || 0,
+    r.amountPaid || 0,
+    Math.max(0, (r.monthlyFee || 0) - (r.amountPaid || 0)),
+    `"${r.status || ''}"`,
+    `"${r.remark || ''}"`
+  ]);
+
+  const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement('a');
+  link.setAttribute('href', encodedUri);
+  link.setAttribute('download', `${(coachingName || 'Coaching').replace(/\s+/g, '_')}_Fee_Report.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+/**
+ * 4. Export Coaching Summary PDF (Used by ExportReportModal)
+ */
+export const downloadFeeSummaryPDF = ({ coachingName, reportTitle, records }) => {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 41, 59);
+  doc.text(coachingName || 'Tuition Center', 14, 15);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 116, 139);
+  doc.text(`${reportTitle || 'Fee Summary Report'} - Generated on ${new Date().toLocaleDateString('en-IN')}`, 14, 22);
+
+  const tableData = records.map(r => [
+    r.studentName,
+    r.phone,
+    r.className,
+    r.subjectName,
+    `${r.month}/${r.year}`,
+    `INR ${r.monthlyFee}`,
+    `INR ${r.amountPaid}`,
+    `INR ${Math.max(0, r.monthlyFee - r.amountPaid)}`,
+    r.status?.toUpperCase()
+  ]);
+
+  autoTable(doc, {
+    startY: 28,
+    head: [['Student Name', 'Contact', 'Class', 'Subject', 'Month/Year', 'Fee', 'Paid', 'Balance', 'Status']],
+    body: tableData,
+    theme: 'striped',
+    headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+    bodyStyles: { fontSize: 8, textColor: [51, 65, 85] },
+    margin: { left: 14, right: 14 }
+  });
+
+  doc.save(`${(coachingName || 'Coaching').replace(/\s+/g, '_')}_Summary_Report.pdf`);
+};
+
 export default {
   downloadPaymentReceiptPDF,
-  downloadClassSubjectRangeReceiptPDF
+  downloadClassSubjectRangeReceiptPDF,
+  downloadFeeSummaryCSV,
+  downloadFeeSummaryPDF
 };

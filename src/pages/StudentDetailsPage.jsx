@@ -171,10 +171,27 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
     return selectedDate < joinMonthStart;
   };
 
-  // Download Class-Subject Specific Receipt with Validation
+  // Download Class-Subject Specific Receipt with Validation & Dynamic Teacher Lookup
   const handleGenerateClassSubjectReceipt = async () => {
     if (!student || !coaching || !receiptModal) return;
     const { enrollment } = receiptModal;
+
+    // Retrieve Teacher Name from enrollment or fallback to fetching class details
+    let teacherName = enrollment.teacherName || 'N/A';
+    if (teacherName === 'N/A' && enrollment.classId && coaching.id) {
+      try {
+        const classSnap = await getDoc(doc(db, 'coachings', coaching.id, 'classes', enrollment.classId));
+        if (classSnap.exists()) {
+          const classData = classSnap.data();
+          const sub = classData.subjects?.find(s => s.id === enrollment.subjectId || s.name === enrollment.subjectName);
+          if (sub?.teacherName) {
+            teacherName = sub.teacherName;
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching subject teacher name:", err);
+      }
+    }
 
     if (receiptMode === 'single') {
       // Validation Check
@@ -193,7 +210,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
         classSubjectInfo: {
           className: enrollment.className,
           subjectName: enrollment.subjectName,
-          teacherName: enrollment.teacherName || 'N/A',
+          teacherName: teacherName,
           monthlyFee: enrollment.monthlyFee,
           month: singleMonth,
           year: singleYear
@@ -210,7 +227,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
         return;
       }
 
-      // Check if start date or any month in range is prior to enrollment
       if (isMonthBeforeEnrollment(enrollment, startMonth, startYear)) {
         alert("cannot download receipt for month when student was not enrolled");
         return;
@@ -243,7 +259,10 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
       downloadClassSubjectRangeReceiptPDF({
         coaching,
         student,
-        classSubjectInfo: enrollment,
+        classSubjectInfo: {
+          ...enrollment,
+          teacherName: teacherName
+        },
         monthRecords: compiledRecords,
         dateRangeText: `${startMonth}/${startYear} to ${endMonth}/${endYear}`
       });

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 
 import { AuthPage } from './pages/AuthPage';
 import { AdminDashboard } from './pages/AdminDashboard';
@@ -12,13 +12,28 @@ import { ClassDetailsPage } from './pages/ClassDetailsPage';
 import SubjectDetailsPage from './pages/SubjectDetailsPage';
 import { CoachingView } from './components/coaching/CoachingView';
 import { TeacherDashboard } from './components/dashboard/TeacherDashboard';
+import { ChatModal } from './components/ChatModal';
 
-import { LogOut, Shield, BookOpen, User, ChevronRight, Home, ArrowLeft } from 'lucide-react';
+import { 
+  LogOut, Shield, BookOpen, User, ChevronRight, 
+  Home, ArrowLeft, MessageSquare, ShieldAlert 
+} from 'lucide-react';
+
+const ADMIN_EMAIL = 'saurabh@gmail.com';
+
+const ADMIN_ACCOUNT = {
+  uid: 'ADMIN_SUPER_USER_ID',
+  email: ADMIN_EMAIL,
+  name: 'System Admin'
+};
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // User Chat Modal State
+  const [showUserChat, setShowUserChat] = useState(false);
 
   // Stack-based router history with preserved individual screen states
   const [navigationHistory, setNavigationHistory] = useState([
@@ -28,23 +43,43 @@ export default function App() {
   const currentNav = navigationHistory[navigationHistory.length - 1] || { screen: 'dashboard', state: {} };
 
   useEffect(() => {
+    let unsubProfile = () => {};
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
+
+        // Fetch user document
         const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) setUserData(userDoc.data());
+        if (userDoc.exists()) {
+          setUserData(userDoc.data());
+        }
+
+        // Setup real-time profile listener for non-admin accounts to listen for account status updates (active / stopped / deleted)
+        if (user.email !== ADMIN_EMAIL) {
+          unsubProfile = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
+            if (docSnap.exists()) {
+              setUserData({ uid: docSnap.id, ...docSnap.data() });
+            }
+          });
+        }
       } else {
         setCurrentUser(null);
         setUserData(null);
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      unsubProfile();
+    };
   }, []);
 
   const handleLogout = () => {
     signOut(auth);
     setNavigationHistory([{ screen: 'dashboard', state: {} }]);
+    setShowUserChat(false);
   };
 
   // Push new screen state into history
@@ -80,23 +115,40 @@ export default function App() {
     );
   }
 
+  // 1. Unauthenticated Login / Register
   if (!currentUser) {
     return <AuthPage onAuthSuccess={(data) => setUserData(data)} />;
   }
 
-  if (userData?.role === 'admin') {
+  // 2. Admin Dashboard View (Dedicated System Admin Account)
+  if (currentUser.email === ADMIN_EMAIL || userData?.role === 'admin') {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <header className="bg-white border-b border-slate-100 px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Shield className="text-indigo-600" size={20} />
-            <span className="font-bold text-slate-800">Admin Control Panel</span>
+      <AdminDashboard 
+        adminUser={ADMIN_ACCOUNT} 
+        onLogout={handleLogout} 
+      />
+    );
+  }
+
+  // 3. Account Terminated / Deleted Guard Screen
+  if (userData?.status === 'deleted') {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center space-y-4 shadow-xl border border-rose-100">
+          <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl mx-auto flex items-center justify-center">
+            <ShieldAlert size={24} />
           </div>
-          <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs text-red-600 hover:underline font-medium">
-            <LogOut size={14} /> Sign Out
+          <h2 className="text-xl font-extrabold text-slate-900">Account Terminated</h2>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Your account has been deleted by the system administrator.
+          </p>
+          <button 
+            onClick={handleLogout} 
+            className="px-5 py-2.5 bg-slate-900 text-white font-bold text-xs rounded-xl shadow-md"
+          >
+            Sign Out
           </button>
-        </header>
-        <AdminDashboard />
+        </div>
       </div>
     );
   }
@@ -106,6 +158,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased">
+      
       {/* Top Navbar */}
       <header className="bg-white border-b border-slate-100 px-6 py-3 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
@@ -119,17 +172,40 @@ export default function App() {
             <span className="font-bold text-slate-800 tracking-tight">TuitionManager</span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
               <User size={14} />
               <span className="font-medium">{userData?.name || currentUser.email}</span>
             </div>
-            <button onClick={handleLogout} className="text-xs text-slate-500 hover:text-red-600 transition-colors p-1" title="Sign Out">
+
+            {/* Feature: Direct Encrypted Chat Button with Admin */}
+            <button
+              onClick={() => setShowUserChat(true)}
+              className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border border-indigo-100"
+              title="Message Admin"
+            >
+              <MessageSquare size={14} />
+              <span className="hidden sm:inline">Message Admin</span>
+            </button>
+
+            <button 
+              onClick={handleLogout} 
+              className="text-xs text-slate-500 hover:text-red-600 transition-colors p-1" 
+              title="Sign Out"
+            >
               <LogOut size={16} />
             </button>
           </div>
         </div>
       </header>
+
+      {/* Account Paused Banner Guard */}
+      {userData?.status === 'stopped' && (
+        <div className="bg-amber-500 text-white p-2.5 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-sm">
+          <ShieldAlert size={16} />
+          <span>Your account is paused by the administrator. Work actions inside coachings are disabled, but messaging with admin is active.</span>
+        </div>
+      )}
 
       {/* Navigation Header with Universal Go Back */}
       <div className="bg-white border-b border-slate-100 py-2.5 shadow-xs sticky top-[57px] z-30">
@@ -192,7 +268,7 @@ export default function App() {
       </div>
 
       {/* Router Screen Rendering */}
-      <main className="p-6">
+      <main className={`p-6 ${userData?.status === 'stopped' ? 'pointer-events-none opacity-50 select-none' : ''}`}>
         {currentNav.screen === 'dashboard' && (
           <TeacherDashboard 
             userId={currentUser.uid} 
@@ -258,6 +334,19 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* User Encrypted Direct Chat Modal with Admin */}
+      {showUserChat && (
+        <ChatModal
+          currentUser={{ 
+            uid: currentUser.uid, 
+            name: userData?.name || currentUser.email, 
+            email: currentUser.email 
+          }}
+          chatPartner={ADMIN_ACCOUNT}
+          onClose={() => setShowUserChat(false)}
+        />
+      )}
     </div>
   );
 }
