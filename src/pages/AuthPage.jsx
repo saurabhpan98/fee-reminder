@@ -12,7 +12,6 @@ export const AuthPage = ({ onAuthSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showForgotModal, setShowForgotModal] = useState(false);
-
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -28,11 +27,18 @@ export const AuthPage = ({ onAuthSuccess }) => {
 
     try {
       if (isLogin) {
-        const userCred = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+        const userCred = await signInWithEmailAndPassword(auth, formData.email.trim(), formData.password);
         const userDoc = await getDoc(doc(db, 'users', userCred.user.uid));
+
+        if (!userDoc.exists()) {
+          setError('User not found');
+          setLoading(false);
+          return;
+        }
+
         onAuthSuccess(userDoc.data());
       } else {
-        const userCred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+        const userCred = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
         
         const role = formData.email.toLowerCase() === 'saurabh@gmail.com' ? 'admin' : 'teacher';
         
@@ -48,7 +54,16 @@ export const AuthPage = ({ onAuthSuccess }) => {
         onAuthSuccess(userData);
       }
     } catch (err) {
-      setError(err.message.replace('Firebase: ', ''));
+      // Precise Error Handling for Login
+      if (err.code === 'auth/user-not-found') {
+        setError('User not found');
+      } else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('Incorrect email or password');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Please enter a valid email address.');
+      } else {
+        setError(err.message.replace('Firebase: ', ''));
+      }
     } finally {
       setLoading(false);
     }
@@ -66,7 +81,7 @@ export const AuthPage = ({ onAuthSuccess }) => {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-medium">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-semibold">
             {error}
           </div>
         )}
@@ -104,7 +119,6 @@ export const AuthPage = ({ onAuthSuccess }) => {
             <div className="flex justify-between items-center mb-1">
               <label className="block text-xs font-semibold text-slate-600 uppercase">Password</label>
               
-              {/* Forgot Password Link (Only shown on Login mode) */}
               {isLogin && (
                 <button
                   type="button"
@@ -129,7 +143,10 @@ export const AuthPage = ({ onAuthSuccess }) => {
 
         <div className="mt-6 text-center">
           <button
-            onClick={() => setIsLogin(!isLogin)}
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setError('');
+            }}
             className="text-xs font-medium text-slate-500 hover:text-indigo-600 transition-colors"
           >
             {isLogin ? "Don't have an account? Sign Up" : "Already registered? Sign In"}

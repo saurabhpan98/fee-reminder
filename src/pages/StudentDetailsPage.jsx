@@ -8,8 +8,8 @@ import {
 } from '../utils/exportUtils';
 import { 
   Phone, Mail, MapPin, Trash2, AlertTriangle, ArrowLeft, 
-  UserCheck, UserMinus, DollarSign, Calendar, Edit3, X, Check,
-  BookOpen, Sparkles, FileText
+  UserCheck, UserMinus, DollarSign, Calendar, Edit3, X, Check, 
+  BookOpen, Sparkles, FileText, MessageCircle
 } from 'lucide-react';
 
 export const StudentDetailsPage = ({ studentId, onBack }) => {
@@ -31,7 +31,13 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
   // Per Class-Subject Specific Receipt Modal State
   const [receiptModal, setReceiptModal] = useState(null); // { enrollment }
   const [receiptMode, setReceiptMode] = useState('single'); // 'single' | 'range'
-  
+
+  // WhatsApp Modal State
+  const [whatsappModal, setWhatsappModal] = useState(null); // { enrollment }
+  const [waMonth, setWaMonth] = useState(new Date().getMonth() + 1);
+  const [waYear, setWaYear] = useState(new Date().getFullYear());
+  const [waFeeRecord, setWaFeeRecord] = useState({ status: 'unpaid', remark: '', amountPaid: 0 });
+
   // Month / Year States for Receipts
   const [singleMonth, setSingleMonth] = useState(new Date().getMonth() + 1);
   const [singleYear, setSingleYear] = useState(new Date().getFullYear());
@@ -74,7 +80,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
       await Promise.all(deletePromises);
 
       await deleteDoc(doc(db, 'students', studentId));
-
       setShowDeleteModal(false);
       onBack();
     } catch (err) {
@@ -104,7 +109,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
       }
       return e;
     });
-
     await updateDoc(doc(db, 'students', studentId), { enrollments: updated });
     fetchStudent();
   };
@@ -162,6 +166,77 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
     fetchStudent();
   };
 
+  // WhatsApp Helpers
+  const openWhatsappModal = async (enrollment) => {
+    setWhatsappModal({ enrollment });
+    await fetchWaFeeRecord(enrollment.enrollmentId, waYear, waMonth);
+  };
+
+  const fetchWaFeeRecord = async (enrollmentId, year, month) => {
+    const recordId = `${studentId}_${enrollmentId}_${year}_${month}`;
+    const snap = await getDoc(doc(db, 'feeRecords', recordId));
+    if (snap.exists()) {
+      setWaFeeRecord(snap.data());
+    } else {
+      setWaFeeRecord({ status: 'unpaid', remark: '', amountPaid: 0 });
+    }
+  };
+
+  const handleWaYearMonthChange = (y, m) => {
+    setWaYear(y);
+    setWaMonth(m);
+    if (whatsappModal) {
+      fetchWaFeeRecord(whatsappModal.enrollment.enrollmentId, y, m);
+    }
+  };
+
+  const handleSendWhatsappMessage = () => {
+    if (!whatsappModal || !student) return;
+
+    const { enrollment } = whatsappModal;
+    
+    // Safety Guard
+    if (isMonthBeforeEnrollment(enrollment, waMonth, waYear)) {
+      alert("Cannot send WhatsApp message for a month when the student was not enrolled.");
+      return;
+    }
+
+    const monthName = new Date(0, waMonth - 1).toLocaleString('default', { month: 'long' });
+    const monthlyFee = enrollment.monthlyFee || 0;
+    const amountPaid = waFeeRecord.amountPaid || (waFeeRecord.status === 'paid' ? monthlyFee : 0);
+    const balanceLeft = Math.max(0, monthlyFee - amountPaid);
+
+    let statusText = 'Unpaid';
+    if (waFeeRecord.status === 'paid') statusText = 'Fully Paid';
+    if (waFeeRecord.status === 'partially_paid') statusText = 'Partially Paid';
+
+    // Format Message Text
+    let message = `*Fee Statement - ${coaching?.name || 'Tuition Center'}*\n\n`;
+    message += `Dear *${student.name}*,\n`;
+    message += `Here is your fee summary for *${enrollment.className} (${enrollment.subjectName})*:\n\n`;
+    message += `🗓 *Period:* ${monthName} ${waYear}\n`;
+    message += `💵 *Monthly Tuition Fee:* ₹${monthlyFee}\n`;
+    message += `✅ *Amount Paid:* ₹${amountPaid}\n`;
+    message += `📌 *Remaining Balance Due:* ₹${balanceLeft}\n`;
+    message += `📊 *Status:* ${statusText}\n`;
+
+    if (waFeeRecord.remark) {
+      message += `📝 *Remark:* ${waFeeRecord.remark}\n`;
+    }
+
+    message += `\nThank you!`;
+
+    // Clean phone number for WhatsApp link
+    let cleanPhone = (student.phone || '').replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 10) {
+      cleanPhone = `91${cleanPhone}`;
+    }
+
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, '_blank');
+    setWhatsappModal(null);
+  };
+
   // Helper: Checks if student was NOT enrolled during a given month/year
   const isMonthBeforeEnrollment = (enrollment, month, year) => {
     if (!enrollment || !enrollment.joinedAt) return false;
@@ -174,9 +249,9 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
   // Download Class-Subject Specific Receipt with Validation & Dynamic Teacher Lookup
   const handleGenerateClassSubjectReceipt = async () => {
     if (!student || !coaching || !receiptModal) return;
+
     const { enrollment } = receiptModal;
 
-    // Retrieve Teacher Name from enrollment or fallback to fetching class details
     let teacherName = enrollment.teacherName || 'N/A';
     if (teacherName === 'N/A' && enrollment.classId && coaching.id) {
       try {
@@ -194,16 +269,15 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
     }
 
     if (receiptMode === 'single') {
-      // Validation Check
       if (isMonthBeforeEnrollment(enrollment, singleMonth, singleYear)) {
-        alert("cannot download receipt for month when student was not enrolled");
+        alert("Cannot download receipt for month when student was not enrolled");
         return;
       }
 
       const feeSnap = await getDocs(query(collection(db, 'feeRecords'), where('studentId', '==', studentId)));
       const allFeeRecords = feeSnap.docs.map(d => d.data());
       const rec = allFeeRecords.find(f => f.enrollmentId === enrollment.enrollmentId && f.month === Number(singleMonth) && f.year === Number(singleYear));
-      
+
       downloadPaymentReceiptPDF({
         coaching,
         student,
@@ -218,7 +292,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
         feeRecord: rec || { status: 'unpaid', amountPaid: 0 }
       });
     } else {
-      // Range Validation Check
       const startVal = Number(startYear) * 12 + Number(startMonth);
       const endVal = Number(endYear) * 12 + Number(endMonth);
 
@@ -228,7 +301,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
       }
 
       if (isMonthBeforeEnrollment(enrollment, startMonth, startYear)) {
-        alert("cannot download receipt for month when student was not enrolled");
+        alert("Cannot download receipt for month when student was not enrolled");
         return;
       }
 
@@ -286,6 +359,10 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
     return isMonthBeforeEnrollment(enr, selectedMonth, selectedYear);
   };
 
+  const isWaPreEnrollment = (enr) => {
+    return isMonthBeforeEnrollment(enr, waMonth, waYear);
+  };
+
   const monthlyFee = activeModalEnrollment?.monthlyFee || 0;
   const currentPaid = Number(feeRecord.amountPaid || 0);
   const amountLeft = Math.max(0, monthlyFee - currentPaid);
@@ -302,7 +379,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
           <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
           Back to Roster
         </button>
-
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
           <BookOpen className="w-3.5 h-3.5" /> Student Management
         </span>
@@ -318,7 +394,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white font-extrabold text-xl flex items-center justify-center shadow-md shadow-indigo-100 shrink-0">
                 {student.name.charAt(0).toUpperCase()}
               </div>
-
               <div className="space-y-1.5">
                 <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight">{student.name}</h1>
                 
@@ -343,7 +418,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
               >
                 <Edit3 className="w-3.5 h-3.5 text-slate-500" /> Edit Profile
               </button>
-
               <button
                 onClick={() => setShowDeleteModal(true)}
                 className="px-4 py-2.5 bg-red-50 hover:bg-red-100/80 text-red-600 font-semibold text-xs rounded-xl border border-red-100 shadow-xs transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5"
@@ -379,7 +453,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                   placeholder="Student Name"
                 />
               </div>
-
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone Number</label>
                 <input
@@ -391,7 +464,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                   placeholder="Phone Number"
                 />
               </div>
-
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Email Address</label>
                 <input
@@ -402,7 +474,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                   placeholder="Email Address"
                 />
               </div>
-
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Residential Address</label>
                 <input
@@ -439,7 +510,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div>
             <h3 className="font-extrabold text-slate-800 text-base tracking-tight">Class & Subject Enrollments</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Manage subject status, record payments, and download receipts</p>
+            <p className="text-xs text-slate-500 mt-0.5">Manage subject status, record payments, and send fee messages</p>
           </div>
           
           <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full font-bold text-xs">
@@ -480,6 +551,15 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+                  {/* WhatsApp Fee Message Button */}
+                  <button
+                    onClick={() => openWhatsappModal(enr)}
+                    className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold text-xs rounded-xl border border-emerald-200 transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 shadow-xs"
+                    title="Send WhatsApp Fee Details"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600" /> WhatsApp
+                  </button>
+
                   {/* Interactive Fee Ledger Button */}
                   <button
                     onClick={() => openFeeModal(enr)}
@@ -488,13 +568,13 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                     <DollarSign className="w-3.5 h-3.5" /> Fee Ledger
                   </button>
 
-                  {/* Scoped Class-Subject Download Receipt Button */}
+                  {/* Download Receipt Button */}
                   <button
                     onClick={() => setReceiptModal({ enrollment: enr })}
                     className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl text-slate-700 font-bold text-xs transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 shadow-xs"
                     title="Generate & Download Receipt"
                   >
-                    <FileText className="w-3.5 h-3.5 text-slate-500" /> Download Receipt
+                    <FileText className="w-3.5 h-3.5 text-slate-500" /> Receipt
                   </button>
 
                   {/* Interactive Re-enroll / Un-enroll Toggle Button */}
@@ -578,7 +658,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                   {activeModalEnrollment.className} — {activeModalEnrollment.subjectName} (₹{activeModalEnrollment.monthlyFee}/month)
                 </p>
               </div>
-
               <button 
                 onClick={() => setActiveModalEnrollment(null)}
                 className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
@@ -596,7 +675,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
               >
                 {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
               </select>
-
               <select 
                 value={selectedMonth} 
                 onChange={(e) => handleYearMonthChange(selectedYear, e.target.value)}
@@ -680,19 +758,107 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button 
-                onClick={() => setActiveModalEnrollment(null)} 
+                onClick={() => setActiveModalEnrollment(null)}
                 className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
               >
                 Cancel
               </button>
               {!isPreEnrollment(activeModalEnrollment) && (
                 <button 
-                  onClick={() => handleSaveFee()} 
+                  onClick={() => handleSaveFee()}
                   className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-95"
                 >
                   Save Status
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Fee Message Modal */}
+      {whatsappModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2 text-emerald-600">
+                  <MessageCircle className="w-5 h-5" /> Send WhatsApp Fee Statement
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {whatsappModal.enrollment.className} ({whatsappModal.enrollment.subjectName})
+                </p>
+              </div>
+              <button onClick={() => setWhatsappModal(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Select Target Month / Year */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Month</label>
+                <select
+                  value={waMonth}
+                  onChange={(e) => handleWaYearMonthChange(waYear, e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                >
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i + 1} value={i + 1}>
+                      {new Date(0, i).toLocaleString('default', { month: 'long' })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Year</label>
+                <select
+                  value={waYear}
+                  onChange={(e) => handleWaYearMonthChange(e.target.value, waMonth)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                >
+                  <option value={2025}>2025</option>
+                  <option value={2026}>2026</option>
+                  <option value={2027}>2027</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Joining Date Validation Banner */}
+            {isWaPreEnrollment(whatsappModal.enrollment) ? (
+              <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-center text-xs font-bold flex items-center justify-center gap-2">
+                <AlertTriangle size={16} className="shrink-0" />
+                <span>Cannot send WhatsApp message for a month when the student was not enrolled.</span>
+              </div>
+            ) : (
+              /* Live Message Preview Box */
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs text-slate-700 space-y-1">
+                <p className="font-bold text-[11px] text-slate-400 uppercase tracking-wider mb-1">Preview Message Payload:</p>
+                <p><strong>Period:</strong> {new Date(0, waMonth - 1).toLocaleString('default', { month: 'long' })} {waYear}</p>
+                <p><strong>Monthly Fee:</strong> ₹{whatsappModal.enrollment.monthlyFee}</p>
+                <p><strong>Amount Paid:</strong> ₹{waFeeRecord.amountPaid || (waFeeRecord.status === 'paid' ? whatsappModal.enrollment.monthlyFee : 0)}</p>
+                <p><strong>Balance Left:</strong> ₹{Math.max(0, whatsappModal.enrollment.monthlyFee - (waFeeRecord.amountPaid || (waFeeRecord.status === 'paid' ? whatsappModal.enrollment.monthlyFee : 0)))}</p>
+                <p><strong>Status:</strong> {waFeeRecord.status === 'paid' ? 'Fully Paid' : waFeeRecord.status === 'partially_paid' ? 'Partially Paid' : 'Unpaid'}</p>
+                {waFeeRecord.remark && <p><strong>Remark:</strong> {waFeeRecord.remark}</p>}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setWhatsappModal(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isWaPreEnrollment(whatsappModal.enrollment)}
+                onClick={handleSendWhatsappMessage}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <MessageCircle size={14} /> Send WhatsApp Message
+              </button>
             </div>
           </div>
         </div>
@@ -764,7 +930,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                       </select>
                     </div>
                   </div>
-
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">To (Month/Year)</label>
                     <div className="flex gap-1">

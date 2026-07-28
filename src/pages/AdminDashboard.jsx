@@ -7,15 +7,16 @@ import {
 } from 'firebase/firestore';
 import { ChatModal } from '../components/ChatModal';
 import { 
-  Users, Bell, LogOut, MessageSquare, ShieldAlert, PauseCircle, 
-  PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon 
+  Users, Bell, LogOut, MessageSquare, PauseCircle, 
+  PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon, Filter 
 } from 'lucide-react';
 
 export const AdminDashboard = ({ adminUser, onLogout }) => {
   const [users, setUsers] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('all'); // Filter state
   const [selectedUser, setSelectedUser] = useState(null);
   const [userCoachings, setUserCoachings] = useState([]);
-  
+
   // Notification State
   const [notifications, setNotifications] = useState([]);
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
@@ -28,14 +29,12 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Fix 1: Close notification dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
         setShowNotificationDropdown(false);
       }
     };
-
     if (showNotificationDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
@@ -44,13 +43,9 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     };
   }, [showNotificationDropdown]);
 
-  /**
-   * Comprehensive Multi-Field & Subcollection Search for User Coachings
-   */
   const fetchCoachingsForUser = async (userObj) => {
     const combinedDocs = new Map();
     const coachingRef = collection(db, 'coachings');
-
     const idsToTest = Array.from(new Set([
       userObj.uid,
       userObj.id,
@@ -66,35 +61,29 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
         getDocs(query(coachingRef, where('userEmail', '==', testId))),
         getDocs(query(coachingRef, where('email', '==', testId)))
       ];
-
       const results = await Promise.all(fieldQueries);
       results.forEach(snap => {
         snap.docs.forEach(d => combinedDocs.set(d.id, { id: d.id, ...d.data() }));
       });
     }
-
     if (combinedDocs.size === 0 && userObj.uid) {
       try {
         const subSnap = await getDocs(collection(db, 'users', userObj.uid, 'coachings'));
         subSnap.docs.forEach(d => combinedDocs.set(d.id, { id: d.id, ...d.data() }));
       } catch (e) {
-        // Subcollection doesn't exist or permitted
+        // Subcollection fallback
       }
     }
-
     return Array.from(combinedDocs.values());
   };
 
   useEffect(() => {
-    // 1. Realtime listener on 'users' collection
     const unsubUsers = onSnapshot(collection(db, 'users'), async (snapshot) => {
       const rawUsers = snapshot.docs.map(uDoc => ({
         uid: uDoc.id,
         ...uDoc.data()
       }));
-
       const nonAdminUsers = rawUsers.filter(u => u.email !== 'saurabh@gmail.com');
-
       const updatedUsersList = await Promise.all(
         nonAdminUsers.map(async (u) => {
           const coachings = await fetchCoachingsForUser(u);
@@ -104,15 +93,12 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
           };
         })
       );
-
       setUsers(updatedUsersList);
     });
 
-    // 2. Realtime listener for Unread Admin Notifications
     const unsubChats = onSnapshot(collection(db, 'chats'), async () => {
       const allUsersSnap = await getDocs(collection(db, 'users'));
       const unreadList = [];
-
       for (const uDoc of allUsersSnap.docs) {
         if (uDoc.data().email === 'saurabh@gmail.com') continue;
         const chatId = [adminUser.uid, uDoc.id].sort().join('_');
@@ -121,7 +107,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
           where('receiverId', '==', adminUser.uid),
           where('isRead', '==', false)
         ));
-
         if (!msgSnap.empty) {
           unreadList.push({
             user: { uid: uDoc.id, ...uDoc.data() },
@@ -138,7 +123,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     };
   }, [adminUser.uid]);
 
-  // Fix 2: Remove clicked notification entry immediately & open chat
   const handleSelectNotification = (user) => {
     setNotifications(prev => prev.filter(n => n.user.uid !== user.uid));
     setShowNotificationDropdown(false);
@@ -154,34 +138,28 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   const handleToggleUserStatus = async () => {
     if (!selectedUser) return;
     const newStatus = selectedUser.status === 'stopped' ? 'active' : 'stopped';
-    
     await updateDoc(doc(db, 'users', selectedUser.uid), {
       status: newStatus
     });
-
     setSelectedUser(prev => ({ ...prev, status: newStatus }));
   };
 
   const handleConfirmDeleteUser = async () => {
     if (!selectedUser) return;
     setIsProcessing(true);
-
     try {
       const coachings = await fetchCoachingsForUser(selectedUser);
       for (const c of coachings) {
         await deleteDoc(doc(db, 'coachings', c.id));
       }
-
       const studentSnap = await getDocs(query(collection(db, 'students'), where('userId', '==', selectedUser.uid)));
       for (const sDoc of studentSnap.docs) {
         await deleteDoc(doc(db, 'students', sDoc.id));
       }
-
       await updateDoc(doc(db, 'users', selectedUser.uid), {
         status: 'deleted',
         isLoginDisabled: true
       });
-
       setShowDeleteUserModal(false);
       setSelectedUser(null);
     } catch (err) {
@@ -192,6 +170,27 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     }
   };
 
+  // Helper function to define sorting hierarchy: Active -> Stopped -> Deleted
+  const getStatusWeight = (status) => {
+    const s = (status || 'active').toLowerCase();
+    if (s === 'active') return 1;
+    if (s === 'stopped') return 2;
+    if (s === 'deleted') return 3;
+    return 4;
+  };
+
+  // Filter users based on statusFilter selection
+  const filteredUsers = users.filter(u => {
+    const s = u.status || 'active';
+    if (statusFilter === 'all') return true;
+    return s === statusFilter;
+  });
+
+  // Sort list: Active accounts first, then Stopped, then Deleted
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    return getStatusWeight(a.status) - getStatusWeight(b.status);
+  });
+
   return (
     <div className="min-h-screen bg-slate-100/70 font-sans text-slate-800 pb-12">
       {/* Top Header */}
@@ -201,9 +200,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
             <div className="p-2 bg-indigo-600 rounded-xl"><Users size={18}/></div>
             <h1 className="font-extrabold text-base tracking-tight">Admin System Dashboard</h1>
           </div>
-
           <div className="flex items-center gap-4">
-            {/* Notification Bell Container with ref */}
             <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
@@ -216,8 +213,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   </span>
                 )}
               </button>
-
-              {/* Notifications Dropdown */}
               {showNotificationDropdown && (
                 <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 text-slate-800">
                   <div className="px-4 py-2 border-b border-slate-100 font-extrabold text-xs text-slate-500">
@@ -242,7 +237,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                 </div>
               )}
             </div>
-
             <button
               onClick={onLogout}
               className="flex items-center gap-2 px-3.5 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white rounded-xl text-xs font-bold transition-all"
@@ -255,16 +249,28 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-8">
         {!selectedUser ? (
-          /* User Table */
           <div className="bg-white rounded-3xl border border-slate-200/70 p-6 shadow-xs space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-lg font-extrabold text-slate-900">Registered System Users</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Click on any user row to manage profiles, pause activity, or chat</p>
+                <p className="text-xs text-slate-500 mt-0.5">Click on any user row to manage profile, pause activity, or chat</p>
               </div>
-              <span className="px-3 py-1 bg-slate-100 text-slate-700 font-bold text-xs rounded-full">
-                {users.length} Users
-              </span>
+
+              {/* Status Filter Dropdown */}
+              <div className="flex items-center gap-2">
+                <Filter size={14} className="text-slate-400" />
+                <label className="text-xs font-bold text-slate-500">Filter:</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                >
+                  <option value="all">All Accounts ({users.length})</option>
+                  <option value="active">Active Only</option>
+                  <option value="stopped">Stopped Only</option>
+                  <option value="deleted">Deleted Only</option>
+                </select>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -279,7 +285,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-xs">
-                  {users.map((u) => (
+                  {sortedUsers.map((u) => (
                     <tr
                       key={u.uid}
                       onClick={() => handleOpenUserProfile(u)}
@@ -306,6 +312,12 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   ))}
                 </tbody>
               </table>
+
+              {sortedUsers.length === 0 && (
+                <div className="p-8 text-center text-slate-400 text-xs font-medium">
+                  No users found matching the selected filter.
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -331,9 +343,8 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                       {selectedUser.status || 'active'}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">{selectedUser.email} • Phone: {selectedUser.phone || 'N/A'}</p>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">{selectedUser.email}</p>
                 </div>
-
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => setChatPartner(selectedUser)}
@@ -341,7 +352,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   >
                     <MessageSquare size={14} /> Open Direct Chat
                   </button>
-
                   {selectedUser.status !== 'deleted' && (
                     <button
                       onClick={handleToggleUserStatus}
@@ -355,7 +365,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                       {selectedUser.status === 'stopped' ? 'Resume User Activity' : 'Pause User Activity'}
                     </button>
                   )}
-
                   {selectedUser.status !== 'deleted' && (
                     <button
                       onClick={() => setShowDeleteUserModal(true)}
@@ -367,12 +376,10 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                 </div>
               </div>
 
-              {/* Registered Coachings List */}
               <div className="space-y-3">
                 <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
                   <Building2 size={16} className="text-indigo-600" /> Registered Coachings/Tuitions ({userCoachings.length})
                 </h3>
-
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm whitespace-nowrap">
                     <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
@@ -392,7 +399,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                       ))}
                     </tbody>
                   </table>
-
                   {userCoachings.length === 0 && (
                     <div className="p-6 text-center text-slate-400 text-xs font-medium">
                       No coachings found for this user.
@@ -415,7 +421,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
             </div>
             <p className="text-xs text-slate-600 leading-relaxed bg-rose-50/50 p-3.5 rounded-2xl border border-rose-100">
               Are you sure you want to delete <strong className="text-slate-900">{selectedUser.name}</strong>? 
-              This will permanently purge all their created coachings, classes, subjects, and student records. The user status will be marked as <strong className="text-rose-600">Deleted</strong>.
+              This will permanently purge all created coachings, classes, subjects, and student records. The user status will be marked as <strong className="text-rose-600">Deleted</strong>.
             </p>
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button onClick={() => setShowDeleteUserModal(false)} disabled={isProcessing} className="px-4 py-2 text-xs font-bold text-slate-500">Cancel</button>

@@ -2,8 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-
+import { doc, getDoc, onSnapshot, collection, query, where } from 'firebase/firestore';
 import { AuthPage } from './pages/AuthPage';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AddStudentPage } from './pages/AddStudentPage';
@@ -13,14 +12,12 @@ import SubjectDetailsPage from './pages/SubjectDetailsPage';
 import { CoachingView } from './components/coaching/CoachingView';
 import { TeacherDashboard } from './components/dashboard/TeacherDashboard';
 import { ChatModal } from './components/ChatModal';
-
 import { 
-  LogOut, Shield, BookOpen, User, ChevronRight, 
+  LogOut, BookOpen, User, ChevronRight, 
   Home, ArrowLeft, MessageSquare, ShieldAlert 
 } from 'lucide-react';
 
 const ADMIN_EMAIL = 'saurabh@gmail.com';
-
 const ADMIN_ACCOUNT = {
   uid: 'ADMIN_SUPER_USER_ID',
   email: ADMIN_EMAIL,
@@ -32,10 +29,11 @@ export default function App() {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // User Chat Modal State
+  // User Chat Modal State & Unread Message Badge State
   const [showUserChat, setShowUserChat] = useState(false);
+  const [unreadMsgCount, setUnreadMsgCount] = useState(0);
 
-  // Stack-based router history with preserved individual screen states
+  // Stack-based router history
   const [navigationHistory, setNavigationHistory] = useState([
     { screen: 'dashboard', state: {} }
   ]);
@@ -44,23 +42,33 @@ export default function App() {
 
   useEffect(() => {
     let unsubProfile = () => {};
+    let unsubUnreadChat = () => {};
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
-
-        // Fetch user document
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
           setUserData(userDoc.data());
         }
 
-        // Setup real-time profile listener for non-admin accounts to listen for account status updates (active / stopped / deleted)
         if (user.email !== ADMIN_EMAIL) {
           unsubProfile = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
             if (docSnap.exists()) {
               setUserData({ uid: docSnap.id, ...docSnap.data() });
             }
+          });
+
+          // Real-time listener for unread messages sent by Admin
+          const chatId = [user.uid, ADMIN_ACCOUNT.uid].sort().join('_');
+          const unreadQuery = query(
+            collection(db, 'chats', chatId, 'messages'),
+            where('receiverId', '==', user.uid),
+            where('isRead', '==', false)
+          );
+
+          unsubUnreadChat = onSnapshot(unreadQuery, (snap) => {
+            setUnreadMsgCount(snap.size);
           });
         }
       } else {
@@ -73,6 +81,7 @@ export default function App() {
     return () => {
       unsubscribe();
       unsubProfile();
+      unsubUnreadChat();
     };
   }, []);
 
@@ -82,12 +91,10 @@ export default function App() {
     setShowUserChat(false);
   };
 
-  // Push new screen state into history
   const navigateTo = (screen, state = {}) => {
     setNavigationHistory(prev => [...prev, { screen, state }]);
   };
 
-  // Update current screen state in-place
   const updateCurrentState = (newState) => {
     setNavigationHistory(prev => {
       const updated = [...prev];
@@ -100,7 +107,6 @@ export default function App() {
     });
   };
 
-  // Step-by-step Go Back handler
   const goBack = () => {
     if (navigationHistory.length > 1) {
       setNavigationHistory(prev => prev.slice(0, -1));
@@ -115,12 +121,10 @@ export default function App() {
     );
   }
 
-  // 1. Unauthenticated Login / Register
   if (!currentUser) {
     return <AuthPage onAuthSuccess={(data) => setUserData(data)} />;
   }
 
-  // 2. Admin Dashboard View (Dedicated System Admin Account)
   if (currentUser.email === ADMIN_EMAIL || userData?.role === 'admin') {
     return (
       <AdminDashboard 
@@ -130,7 +134,6 @@ export default function App() {
     );
   }
 
-  // 3. Account Terminated / Deleted Guard Screen
   if (userData?.status === 'deleted') {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
@@ -158,7 +161,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased">
-      
       {/* Top Navbar */}
       <header className="bg-white border-b border-slate-100 px-6 py-3 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
@@ -178,14 +180,20 @@ export default function App() {
               <span className="font-medium">{userData?.name || currentUser.email}</span>
             </div>
 
-            {/* Feature: Direct Encrypted Chat Button with Admin */}
+            {/* Message Admin Button with Animated Unread Badge */}
             <button
               onClick={() => setShowUserChat(true)}
-              className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border border-indigo-100"
+              className="relative px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border border-indigo-100"
               title="Message Admin"
             >
               <MessageSquare size={14} />
               <span className="hidden sm:inline">Message Admin</span>
+              
+              {unreadMsgCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center animate-bounce shadow-md">
+                  {unreadMsgCount}
+                </span>
+              )}
             </button>
 
             <button 
@@ -199,7 +207,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Account Paused Banner Guard */}
+      {/* Account Paused Banner */}
       {userData?.status === 'stopped' && (
         <div className="bg-amber-500 text-white p-2.5 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-sm">
           <ShieldAlert size={16} />
@@ -207,7 +215,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Navigation Header with Universal Go Back */}
+      {/* Navigation Header */}
       <div className="bg-white border-b border-slate-100 py-2.5 shadow-xs sticky top-[57px] z-30">
         <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
@@ -219,9 +227,8 @@ export default function App() {
                 <ArrowLeft size={14} /> Back
               </button>
             )}
-
             <button 
-              onClick={() => setNavigationHistory([{ screen: 'dashboard', state: {} }])}
+              onClick={() => setNavigationHistory([{ screen: 'dashboard', state: {} }])} 
               className="flex items-center gap-1 hover:text-indigo-600 transition-colors"
             >
               <Home size={14} /> Dashboard
@@ -235,28 +242,24 @@ export default function App() {
                 </span>
               </>
             )}
-
             {currentNav.screen === 'classDetails' && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
                 <span className="text-indigo-600 font-bold">Class Details</span>
               </>
             )}
-
             {currentNav.screen === 'subjectDetails' && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
                 <span className="text-indigo-600 font-bold">Subject Details</span>
               </>
             )}
-
             {currentNav.screen === 'addStudent' && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
                 <span className="text-indigo-600 font-bold">Add Student</span>
               </>
             )}
-
             {currentNav.screen === 'studentDetails' && selectedStudent && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
@@ -267,7 +270,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Router Screen Rendering */}
       <main className={`p-6 ${userData?.status === 'stopped' ? 'pointer-events-none opacity-50 select-none' : ''}`}>
         {currentNav.screen === 'dashboard' && (
           <TeacherDashboard 
@@ -277,7 +279,7 @@ export default function App() {
                 coaching, 
                 selectedClassId: '', 
                 selectedSubjectId: '', 
-                activeTab: 'roster'
+                activeTab: 'roster' 
               });
             }} 
           />
@@ -335,7 +337,7 @@ export default function App() {
         )}
       </main>
 
-      {/* User Encrypted Direct Chat Modal with Admin */}
+      {/* User Encrypted Chat Modal */}
       {showUserChat && (
         <ChatModal
           currentUser={{ 
