@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, collection, query, where } from 'firebase/firestore';
@@ -9,12 +9,14 @@ import { AddStudentPage } from './pages/AddStudentPage';
 import { StudentDetailsPage } from './pages/StudentDetailsPage';
 import { ClassDetailsPage } from './pages/ClassDetailsPage';
 import SubjectDetailsPage from './pages/SubjectDetailsPage';
+import { UserPaymentsPage } from './pages/UserPaymentsPage';
 import { CoachingView } from './components/coaching/CoachingView';
 import { TeacherDashboard } from './components/dashboard/TeacherDashboard';
 import { ChatModal } from './components/ChatModal';
 import { 
   LogOut, BookOpen, User, ChevronRight, 
-  Home, ArrowLeft, MessageSquare, ShieldAlert 
+  Home, ArrowLeft, MessageSquare, ShieldAlert, 
+  Bell, CreditCard 
 } from 'lucide-react';
 
 const ADMIN_EMAIL = 'saurabh@gmail.com';
@@ -29,20 +31,37 @@ export default function App() {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // User Chat Modal State & Unread Message Badge State
+  // Notifications State
   const [showUserChat, setShowUserChat] = useState(false);
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
+  const [unreadPayments, setUnreadPayments] = useState([]);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const notifRef = useRef(null);
 
-  // Stack-based router history
+  // Router history
   const [navigationHistory, setNavigationHistory] = useState([
     { screen: 'dashboard', state: {} }
   ]);
 
   const currentNav = navigationHistory[navigationHistory.length - 1] || { screen: 'dashboard', state: {} };
 
+  // Click Outside Notification Listener
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setShowNotifDropdown(false);
+      }
+    };
+    if (showNotifDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showNotifDropdown]);
+
   useEffect(() => {
     let unsubProfile = () => {};
     let unsubUnreadChat = () => {};
+    let unsubPayments = () => {};
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -59,7 +78,7 @@ export default function App() {
             }
           });
 
-          // Real-time listener for unread messages sent by Admin
+          // 1. Unread Admin Messages Listener
           const chatId = [user.uid, ADMIN_ACCOUNT.uid].sort().join('_');
           const unreadQuery = query(
             collection(db, 'chats', chatId, 'messages'),
@@ -69,6 +88,18 @@ export default function App() {
 
           unsubUnreadChat = onSnapshot(unreadQuery, (snap) => {
             setUnreadMsgCount(snap.size);
+          });
+
+          // 2. Unread Payment Notifications Listener
+          const paymentsQuery = query(
+            collection(db, 'payments'),
+            where('userId', '==', user.uid),
+            where('userRead', '==', false)
+          );
+
+          unsubPayments = onSnapshot(paymentsQuery, (snap) => {
+            const unreadP = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setUnreadPayments(unreadP);
           });
         }
       } else {
@@ -82,6 +113,7 @@ export default function App() {
       unsubscribe();
       unsubProfile();
       unsubUnreadChat();
+      unsubPayments();
     };
   }, []);
 
@@ -159,6 +191,9 @@ export default function App() {
   const selectedCoaching = currentNav.state?.coaching;
   const selectedStudent = currentNav.state?.student;
 
+  // Total Unclicked Notification Count
+  const totalNotifCount = (unreadMsgCount > 0 ? 1 : 0) + unreadPayments.length;
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased">
       {/* Top Navbar */}
@@ -180,7 +215,80 @@ export default function App() {
               <span className="font-medium">{userData?.name || currentUser.email}</span>
             </div>
 
-            {/* Message Admin Button with Animated Unread Badge */}
+            {/* Notification Bell Dropdown */}
+            <div className="relative" ref={notifRef}>
+              <button
+                onClick={() => setShowNotifDropdown(!showNotifDropdown)}
+                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full relative transition-colors text-slate-600"
+                title="Notifications"
+              >
+                <Bell size={16} />
+                {totalNotifCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-rose-500 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center animate-bounce shadow-md">
+                    {totalNotifCount}
+                  </span>
+                )}
+              </button>
+
+              {showNotifDropdown && (
+                <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 text-slate-800">
+                  <div className="px-4 py-2 border-b border-slate-100 font-extrabold text-xs text-slate-500">
+                    Notifications
+                  </div>
+
+                  {/* Message Notification */}
+                  {unreadMsgCount > 0 && (
+                    <button
+                      onClick={() => {
+                        setShowNotifDropdown(false);
+                        setShowUserChat(true);
+                      }}
+                      className="w-full text-left px-4 py-3 hover:bg-indigo-50/60 flex items-center justify-between border-b border-slate-50 transition-colors"
+                    >
+                      <div>
+                        <p className="font-bold text-xs text-slate-900">Admin Message</p>
+                        <p className="text-[10px] text-indigo-600 font-semibold">{unreadMsgCount} new message(s)</p>
+                      </div>
+                      <MessageSquare size={16} className="text-indigo-600" />
+                    </button>
+                  )}
+
+                  {/* Payment Notifications */}
+                  {unreadPayments.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setShowNotifDropdown(false);
+                        navigateTo('payments');
+                      }}
+                      className="w-full text-left px-4 py-3 hover:bg-indigo-50/60 flex items-center justify-between border-b border-slate-50 transition-colors"
+                    >
+                      <div>
+                        <p className="font-bold text-xs text-slate-900">Payment {p.status === 'accepted' ? 'Accepted' : 'Rejected'}</p>
+                        <p className="text-[10px] text-slate-500 font-medium">₹{p.amount} ({p.status})</p>
+                      </div>
+                      <CreditCard size={16} className={p.status === 'accepted' ? 'text-emerald-600' : 'text-rose-600'} />
+                    </button>
+                  ))}
+
+                  {totalNotifCount === 0 && (
+                    <div className="p-4 text-center text-xs text-slate-400 font-medium">No new notifications</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Payments Button Top Right */}
+            <button
+              onClick={() => navigateTo('payments')}
+              className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border border-emerald-200"
+              title="Payments Portal"
+            >
+              <CreditCard size={14} />
+              <span className="hidden sm:inline">Payments</span>
+            </button>
+
+            {/* Message Admin Button */}
             <button
               onClick={() => setShowUserChat(true)}
               className="relative px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border border-indigo-100"
@@ -188,12 +296,6 @@ export default function App() {
             >
               <MessageSquare size={14} />
               <span className="hidden sm:inline">Message Admin</span>
-              
-              {unreadMsgCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center animate-bounce shadow-md">
-                  {unreadMsgCount}
-                </span>
-              )}
             </button>
 
             <button 
@@ -266,6 +368,12 @@ export default function App() {
                 <span className="text-indigo-600 font-bold">{selectedStudent.name}</span>
               </>
             )}
+            {currentNav.screen === 'payments' && (
+              <>
+                <ChevronRight size={12} className="text-slate-300" />
+                <span className="text-indigo-600 font-bold">Payments</span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -333,6 +441,14 @@ export default function App() {
           <StudentDetailsPage 
             studentId={selectedStudent.id} 
             onBack={goBack} 
+          />
+        )}
+
+        {currentNav.screen === 'payments' && (
+          <UserPaymentsPage
+            currentUser={currentUser}
+            userData={userData}
+            onBack={goBack}
           />
         )}
       </main>

@@ -6,21 +6,27 @@ import {
   deleteDoc, query, where 
 } from 'firebase/firestore';
 import { ChatModal } from '../components/ChatModal';
+import { AdminPaymentRequestsPage } from './AdminPaymentRequestsPage';
 import { 
   Users, Bell, LogOut, MessageSquare, PauseCircle, 
-  PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon, Filter 
+  PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, CreditCard 
 } from 'lucide-react';
 
 export const AdminDashboard = ({ adminUser, onLogout }) => {
   const [users, setUsers] = useState([]);
-  const [statusFilter, setStatusFilter] = useState('all'); // Filter state
+  const [statusFilter, setStatusFilter] = useState('all');
   const [selectedUser, setSelectedUser] = useState(null);
   const [userCoachings, setUserCoachings] = useState([]);
+  const [userPayments, setUserPayments] = useState([]);
+  const [viewingRequests, setViewingRequests] = useState(false);
 
   // Notification State
   const [notifications, setNotifications] = useState([]);
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
   const notificationRef = useRef(null);
+
+  // Pending Payments Count for Admin Badge
+  const [pendingPaymentsCount, setPendingPaymentsCount] = useState(0);
 
   // Chat State
   const [chatPartner, setChatPartner] = useState(null);
@@ -66,14 +72,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
         snap.docs.forEach(d => combinedDocs.set(d.id, { id: d.id, ...d.data() }));
       });
     }
-    if (combinedDocs.size === 0 && userObj.uid) {
-      try {
-        const subSnap = await getDocs(collection(db, 'users', userObj.uid, 'coachings'));
-        subSnap.docs.forEach(d => combinedDocs.set(d.id, { id: d.id, ...d.data() }));
-      } catch (e) {
-        // Subcollection fallback
-      }
-    }
     return Array.from(combinedDocs.values());
   };
 
@@ -117,9 +115,18 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
       setNotifications(unreadList);
     });
 
+    // Real-time Pending Payments Badge Listener for Admin
+    const unsubPendingPay = onSnapshot(
+      query(collection(db, 'payments'), where('status', '==', 'pending')),
+      (snap) => {
+        setPendingPaymentsCount(snap.size);
+      }
+    );
+
     return () => {
       unsubUsers();
       unsubChats();
+      unsubPendingPay();
     };
   }, [adminUser.uid]);
 
@@ -131,8 +138,15 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
 
   const handleOpenUserProfile = async (user) => {
     setSelectedUser(user);
+    setViewingRequests(false);
     const coachings = await fetchCoachingsForUser(user);
     setUserCoachings(coachings);
+
+    // Fetch user payment history
+    const paySnap = await getDocs(query(collection(db, 'payments'), where('userId', '==', user.uid)));
+    const userPayList = paySnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    userPayList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    setUserPayments(userPayList);
   };
 
   const handleToggleUserStatus = async () => {
@@ -170,7 +184,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     }
   };
 
-  // Helper function to define sorting hierarchy: Active -> Stopped -> Deleted
   const getStatusWeight = (status) => {
     const s = (status || 'active').toLowerCase();
     if (s === 'active') return 1;
@@ -179,17 +192,23 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     return 4;
   };
 
-  // Filter users based on statusFilter selection
   const filteredUsers = users.filter(u => {
     const s = u.status || 'active';
     if (statusFilter === 'all') return true;
     return s === statusFilter;
   });
 
-  // Sort list: Active accounts first, then Stopped, then Deleted
   const sortedUsers = [...filteredUsers].sort((a, b) => {
     return getStatusWeight(a.status) - getStatusWeight(b.status);
   });
+
+  if (viewingRequests) {
+    return (
+      <div className="min-h-screen bg-slate-100/70 font-sans text-slate-800 pb-12 pt-6 px-4 sm:px-6">
+        <AdminPaymentRequestsPage onBack={() => setViewingRequests(false)} />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100/70 font-sans text-slate-800 pb-12">
@@ -200,7 +219,23 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
             <div className="p-2 bg-indigo-600 rounded-xl"><Users size={18}/></div>
             <h1 className="font-extrabold text-base tracking-tight">Admin System Dashboard</h1>
           </div>
-          <div className="flex items-center gap-4">
+
+          <div className="flex items-center gap-3 sm:gap-4">
+            {/* Payment Requests Header Button */}
+            <button
+              onClick={() => setViewingRequests(true)}
+              className="relative px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-700"
+            >
+              <CreditCard size={15} />
+              <span>Payment Requests</span>
+              {pendingPaymentsCount > 0 && (
+                <span className="px-1.5 py-0.5 bg-amber-500 text-slate-900 font-extrabold text-[10px] rounded-full">
+                  {pendingPaymentsCount}
+                </span>
+              )}
+            </button>
+
+            {/* Notification Bell Container */}
             <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
@@ -213,6 +248,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   </span>
                 )}
               </button>
+
               {showNotificationDropdown && (
                 <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 text-slate-800">
                   <div className="px-4 py-2 border-b border-slate-100 font-extrabold text-xs text-slate-500">
@@ -237,6 +273,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                 </div>
               )}
             </div>
+
             <button
               onClick={onLogout}
               className="flex items-center gap-2 px-3.5 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white rounded-xl text-xs font-bold transition-all"
@@ -253,10 +290,9 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-lg font-extrabold text-slate-900">Registered System Users</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Click on any user row to manage profile, pause activity, or chat</p>
+                <p className="text-xs text-slate-500 mt-0.5">Click on any user row to manage profile, view payments, or chat</p>
               </div>
 
-              {/* Status Filter Dropdown */}
               <div className="flex items-center gap-2">
                 <Filter size={14} className="text-slate-400" />
                 <label className="text-xs font-bold text-slate-500">Filter:</label>
@@ -376,6 +412,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                 </div>
               </div>
 
+              {/* Registered Coachings */}
               <div className="space-y-3">
                 <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
                   <Building2 size={16} className="text-indigo-600" /> Registered Coachings/Tuitions ({userCoachings.length})
@@ -402,6 +439,52 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   {userCoachings.length === 0 && (
                     <div className="p-6 text-center text-slate-400 text-xs font-medium">
                       No coachings found for this user.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* User Payment Submissions History */}
+              <div className="space-y-3 pt-4 border-t border-slate-100">
+                <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                  <CreditCard size={16} className="text-indigo-600" /> User Payment Submissions ({userPayments.length})
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm whitespace-nowrap">
+                    <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
+                      <tr>
+                        <th className="px-4 py-3 font-bold">Month/Year</th>
+                        <th className="px-4 py-3 font-bold">Amount</th>
+                        <th className="px-4 py-3 font-bold">Details</th>
+                        <th className="px-4 py-3 font-bold">Status</th>
+                        <th className="px-4 py-3 font-bold">Admin Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                      {userPayments.map(p => (
+                        <tr key={p.id}>
+                          <td className="px-4 py-3 font-bold text-slate-800">
+                            {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
+                          </td>
+                          <td className="px-4 py-3 font-black text-slate-900">₹{p.amount}</td>
+                          <td className="px-4 py-3 text-slate-600">{p.paymentDetails || 'N/A'}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                              p.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                              p.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' :
+                              'bg-rose-100 text-rose-800'
+                            }`}>
+                              {p.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-500">{p.adminRemarks || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {userPayments.length === 0 && (
+                    <div className="p-6 text-center text-slate-400 text-xs font-medium">
+                      No payment submissions found for this user.
                     </div>
                   )}
                 </div>
