@@ -48,7 +48,10 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
     ];
 
     try {
-      await updateDoc(doc(docRef(db, 'payments', payment.id)), {
+      // FIX: Clean single document reference syntax
+      const paymentRef = doc(db, 'payments', payment.id);
+
+      await updateDoc(paymentRef, {
         status: isAccept ? 'accepted' : 'rejected',
         adminRemarks: newRemarkText,
         adminRemarksHistory: updatedHistory,
@@ -63,8 +66,6 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
       alert("Failed to update status: " + err.message);
     }
   };
-
-  const docRef = (database, coll, id) => doc(database, coll, id);
 
   const activeRequests = payments.filter(p => p.status === 'pending' || p.status === 'rejected');
 
@@ -139,7 +140,7 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
                       {p.userRemarks && <p><strong>User Remark:</strong> {p.userRemarks}</p>}
                     </div>
 
-                    {/* Historical Remarks Thread Component */}
+                    {/* Historical Remarks Thread */}
                     {adminHistory.length > 0 && (
                       <div className="p-3 bg-white/90 rounded-xl border border-black/10 space-y-2 text-xs">
                         <p className="font-bold flex items-center gap-1 text-[11px] text-slate-700">
