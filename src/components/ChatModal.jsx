@@ -6,13 +6,14 @@ import {
   serverTimestamp, doc, updateDoc, deleteDoc 
 } from 'firebase/firestore';
 import CryptoJS from 'crypto-js';
-import { X, Send, Trash2, Reply, Bold, Italic, Underline, ShieldAlert } from 'lucide-react';
+import { X, Send, Trash2, Reply, Bold, Italic, Underline, ShieldAlert, AlertTriangle } from 'lucide-react';
 
 const SECRET_KEY = 'tuition_manager_e2ee_secret_key';
 
 export const ChatModal = ({ currentUser, chatPartner, onClose }) => {
   const [messages, setMessages] = useState([]);
   const [replyTo, setReplyTo] = useState(null);
+  const [deleteConfirmMsg, setDeleteConfirmMsg] = useState(null); // Custom Delete Modal State
   const editorRef = useRef(null);
   const messagesEndRef = useRef(null);
 
@@ -22,7 +23,7 @@ export const ChatModal = ({ currentUser, chatPartner, onClose }) => {
   // Deterministic Chat Room ID based on user UIDs
   const chatId = [currentUser.uid, chatPartner.uid].sort().join('_');
 
-  // 1. Real-time Message Listening
+  // Real-time Message Listening
   useEffect(() => {
     if (!chatId) return;
     const q = query(
@@ -104,20 +105,20 @@ export const ChatModal = ({ currentUser, chatPartner, onClose }) => {
     }
   };
 
-  const handleDeleteMessage = async (msgId) => {
-    if (isChatDisabled) return;
-    if (window.confirm('Are you sure you want to delete this message?')) {
-      try {
-        await deleteDoc(doc(db, 'chats', chatId, 'messages', msgId));
-      } catch (err) {
-        console.error("Error deleting message:", err);
-      }
+  const handleConfirmDeleteMessage = async () => {
+    if (isChatDisabled || !deleteConfirmMsg) return;
+    try {
+      await deleteDoc(doc(db, 'chats', chatId, 'messages', deleteConfirmMsg.id));
+      setDeleteConfirmMsg(null);
+    } catch (err) {
+      console.error("Error deleting message:", err);
+      alert("Failed to delete message: " + err.message);
     }
   };
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-3xl w-full max-w-lg h-[600px] flex flex-col shadow-2xl overflow-hidden border border-slate-100">
+      <div className="bg-white rounded-3xl w-full max-w-lg h-[600px] flex flex-col shadow-2xl overflow-hidden border border-slate-100 relative">
         
         {/* Header */}
         <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
@@ -193,9 +194,9 @@ export const ChatModal = ({ currentUser, chatPartner, onClose }) => {
                         </button>
                         {isMe && (
                           <button 
-                            onClick={() => handleDeleteMessage(msg.id)}
+                            onClick={() => setDeleteConfirmMsg(msg)}
                             className="p-1 rounded hover:bg-black/10 text-rose-300 hover:text-rose-100"
-                            title="Delete"
+                            title="Delete Message"
                           >
                             <Trash2 size={12} />
                           </button>
@@ -286,6 +287,47 @@ export const ChatModal = ({ currentUser, chatPartner, onClose }) => {
               >
                 <Send size={14} /> Send
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Confirmation Popup Modal */}
+        {deleteConfirmMsg && (
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-rose-100 animate-in zoom-in-95 duration-200 text-slate-800">
+              <div className="flex items-center gap-3 text-rose-600">
+                <div className="p-2.5 bg-rose-100 rounded-2xl shrink-0">
+                  <AlertTriangle size={20} />
+                </div>
+                <h4 className="font-extrabold text-sm tracking-tight">Delete Message?</h4>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-600 space-y-1">
+                <p className="font-bold text-[10px] text-slate-400 uppercase tracking-wider">Selected Message:</p>
+                <div 
+                  className="line-clamp-2 italic text-slate-800"
+                  dangerouslySetInnerHTML={{ __html: deleteConfirmMsg.text }}
+                />
+              </div>
+
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Are you sure you want to delete this message? This action will remove it permanently for both participants.
+              </p>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => setDeleteConfirmMsg(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDeleteMessage}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md transition-all"
+                >
+                  Yes, Delete
+                </button>
+              </div>
             </div>
           </div>
         )}

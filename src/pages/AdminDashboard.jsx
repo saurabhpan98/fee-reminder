@@ -18,6 +18,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [userCoachings, setUserCoachings] = useState([]);
   const [userPayments, setUserPayments] = useState([]);
+  const [adminCoachingFilter, setAdminCoachingFilter] = useState('all');
   const [viewingRequests, setViewingRequests] = useState(false);
 
   // Notification State
@@ -115,7 +116,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
       setNotifications(unreadList);
     });
 
-    // Real-time Pending Payments Badge Listener for Admin
     const unsubPendingPay = onSnapshot(
       query(collection(db, 'payments'), where('status', '==', 'pending')),
       (snap) => {
@@ -139,6 +139,8 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   const handleOpenUserProfile = async (user) => {
     setSelectedUser(user);
     setViewingRequests(false);
+    setAdminCoachingFilter('all');
+    
     const coachings = await fetchCoachingsForUser(user);
     setUserCoachings(coachings);
 
@@ -202,6 +204,12 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     return getStatusWeight(a.status) - getStatusWeight(b.status);
   });
 
+  // Filter payments for selected user based on coaching selection
+  const filteredUserPayments = userPayments.filter(p => {
+    if (userCoachings.length <= 1 || adminCoachingFilter === 'all') return true;
+    return p.coachingId === adminCoachingFilter;
+  });
+
   if (viewingRequests) {
     return (
       <div className="min-h-screen bg-slate-100/70 font-sans text-slate-800 pb-12 pt-6 px-4 sm:px-6">
@@ -221,7 +229,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
           </div>
 
           <div className="flex items-center gap-3 sm:gap-4">
-            {/* Payment Requests Header Button */}
             <button
               onClick={() => setViewingRequests(true)}
               className="relative px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-700"
@@ -235,7 +242,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
               )}
             </button>
 
-            {/* Notification Bell Container */}
             <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
@@ -446,45 +452,82 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
 
               {/* User Payment Submissions History */}
               <div className="space-y-3 pt-4 border-t border-slate-100">
-                <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-                  <CreditCard size={16} className="text-indigo-600" /> User Payment Submissions ({userPayments.length})
-                </h3>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                    <CreditCard size={16} className="text-indigo-600" /> User Payment Submissions ({userPayments.length})
+                  </h3>
+
+                  {userCoachings.length > 1 && (
+                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
+                      <Filter size={13} className="text-slate-400" />
+                      <label className="font-bold text-slate-500">Filter Coaching:</label>
+                      <select
+                        value={adminCoachingFilter}
+                        onChange={(e) => setAdminCoachingFilter(e.target.value)}
+                        className="bg-transparent border-none font-bold text-slate-800 outline-none cursor-pointer"
+                      >
+                        <option value="all">All Coachings ({userCoachings.length})</option>
+                        {userCoachings.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.name || c.coachingName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm whitespace-nowrap">
                     <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
                       <tr>
+                        <th className="px-4 py-3 font-bold">Coaching Name</th>
                         <th className="px-4 py-3 font-bold">Month/Year</th>
                         <th className="px-4 py-3 font-bold">Amount</th>
+                        <th className="px-4 py-3 font-bold">Date of Payment</th>
                         <th className="px-4 py-3 font-bold">Details</th>
                         <th className="px-4 py-3 font-bold">Status</th>
                         <th className="px-4 py-3 font-bold">Admin Remarks</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                      {userPayments.map(p => (
-                        <tr key={p.id}>
-                          <td className="px-4 py-3 font-bold text-slate-800">
-                            {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
-                          </td>
-                          <td className="px-4 py-3 font-black text-slate-900">₹{p.amount}</td>
-                          <td className="px-4 py-3 text-slate-600">{p.paymentDetails || 'N/A'}</td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                              p.status === 'pending' ? 'bg-amber-100 text-amber-800' :
-                              p.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' :
-                              'bg-rose-100 text-rose-800'
-                            }`}>
-                              {p.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-slate-500">{p.adminRemarks || '-'}</td>
-                        </tr>
-                      ))}
+                      {filteredUserPayments.map(p => {
+                        const isAccepted = p.status === 'accepted';
+                        const acceptanceDate = isAccepted && p.updatedAt 
+                          ? new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : '-';
+
+                        return (
+                          <tr key={p.id}>
+                            <td className="px-4 py-3 font-extrabold text-indigo-700">
+                              {p.coachingName || 'Tuition Center'}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-slate-800">
+                              {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
+                            </td>
+                            <td className="px-4 py-3 font-black text-slate-900">₹{p.amount}</td>
+                            <td className="px-4 py-3 font-bold text-emerald-700">
+                              {acceptanceDate}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">{p.paymentDetails || 'N/A'}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                                p.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                                p.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' :
+                                'bg-rose-100 text-rose-800'
+                              }`}>
+                                {p.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-slate-500">{p.adminRemarks || '-'}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
-                  {userPayments.length === 0 && (
+                  {filteredUserPayments.length === 0 && (
                     <div className="p-6 text-center text-slate-400 text-xs font-medium">
-                      No payment submissions found for this user.
+                      No payment submissions found matching the selected filter.
                     </div>
                   )}
                 </div>
