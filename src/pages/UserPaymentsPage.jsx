@@ -364,6 +364,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                       <th className="px-4 py-3 font-bold">Month/Year</th>
                       <th className="px-4 py-3 font-bold">Amount</th>
                       <th className="px-4 py-3 font-bold">Date of Payment</th>
+                      <th className="px-4 py-3 font-bold">Date of Acceptance</th>
                       <th className="px-4 py-3 font-bold">Details</th>
                       <th className="px-4 py-3 font-bold">Status</th>
                       <th className="px-4 py-3 font-bold">Admin Remarks</th>
@@ -371,6 +372,10 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs font-medium">
                     {acceptedPayments.map(p => {
+                      const submissionDate = p.createdAt 
+                        ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                        : '-';
+
                       const acceptanceDate = p.updatedAt 
                         ? new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
                         : '-';
@@ -384,6 +389,9 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                             {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
                           </td>
                           <td className="px-4 py-3 font-black text-slate-900">₹{p.amount}</td>
+                          <td className="px-4 py-3 font-bold text-slate-700">
+                            {submissionDate}
+                          </td>
                           <td className="px-4 py-3 font-bold text-emerald-700">
                             {acceptanceDate}
                           </td>
