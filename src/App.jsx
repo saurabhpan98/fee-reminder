@@ -4,6 +4,7 @@ import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, collection, query, where } from 'firebase/firestore';
 import { AuthPage } from './pages/AuthPage';
+import { LandingPage } from './pages/LandingPage';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AddStudentPage } from './pages/AddStudentPage';
 import { StudentDetailsPage } from './pages/StudentDetailsPage';
@@ -30,6 +31,9 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // Landing / Auth View Toggle State
+  const [showAuthScreen, setShowAuthScreen] = useState(false);
 
   // Notifications State
   const [showUserChat, setShowUserChat] = useState(false);
@@ -42,7 +46,6 @@ export default function App() {
   const [navigationHistory, setNavigationHistory] = useState([
     { screen: 'dashboard', state: {} }
   ]);
-
   const currentNav = navigationHistory[navigationHistory.length - 1] || { screen: 'dashboard', state: {} };
 
   // Click Outside Notification Listener
@@ -85,7 +88,6 @@ export default function App() {
             where('receiverId', '==', user.uid),
             where('isRead', '==', false)
           );
-
           unsubUnreadChat = onSnapshot(unreadQuery, (snap) => {
             setUnreadMsgCount(snap.size);
           });
@@ -96,7 +98,6 @@ export default function App() {
             where('userId', '==', user.uid),
             where('userRead', '==', false)
           );
-
           unsubPayments = onSnapshot(paymentsQuery, (snap) => {
             const unreadP = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             setUnreadPayments(unreadP);
@@ -121,6 +122,7 @@ export default function App() {
     signOut(auth);
     setNavigationHistory([{ screen: 'dashboard', state: {} }]);
     setShowUserChat(false);
+    setShowAuthScreen(false);
   };
 
   const navigateTo = (screen, state = {}) => {
@@ -153,8 +155,27 @@ export default function App() {
     );
   }
 
+  // If user is not logged in, show Landing Page or Auth Modal Page
   if (!currentUser) {
-    return <AuthPage onAuthSuccess={(data) => setUserData(data)} />;
+    if (showAuthScreen) {
+      return (
+        <div className="relative">
+          <button 
+            onClick={() => setShowAuthScreen(false)}
+            className="fixed top-4 left-4 z-50 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5"
+          >
+            <ArrowLeft size={16} /> Back to Home
+          </button>
+          <AuthPage onAuthSuccess={(data) => setUserData(data)} />
+        </div>
+      );
+    }
+    return (
+      <LandingPage 
+        onGetStarted={() => setShowAuthScreen(true)}
+        onLogin={() => setShowAuthScreen(true)}
+      />
+    );
   }
 
   if (currentUser.email === ADMIN_EMAIL || userData?.role === 'admin') {
@@ -178,7 +199,7 @@ export default function App() {
             Your account has been deleted by the system administrator.
           </p>
           <button 
-            onClick={handleLogout} 
+            onClick={handleLogout}
             className="px-5 py-2.5 bg-slate-900 text-white font-bold text-xs rounded-xl shadow-md"
           >
             Sign Out
@@ -200,7 +221,7 @@ export default function App() {
       <header className="bg-white border-b border-slate-100 px-6 py-3 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div 
-            onClick={() => setNavigationHistory([{ screen: 'dashboard', state: {} }])} 
+            onClick={() => setNavigationHistory([{ screen: 'dashboard', state: {} }])}
             className="flex items-center gap-2 cursor-pointer"
           >
             <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold shadow-md shadow-indigo-100">
@@ -265,7 +286,7 @@ export default function App() {
                     >
                       <div>
                         <p className="font-bold text-xs text-slate-900">Payment {p.status === 'accepted' ? 'Accepted' : 'Rejected'}</p>
-                        <p className="text-[10px] text-slate-500 font-medium">₹{p.amount} ({p.status})</p>
+                        <p className="text-[10px] text-slate-500 font-medium">₹ {p.amount} ({p.status})</p>
                       </div>
                       <CreditCard size={16} className={p.status === 'accepted' ? 'text-emerald-600' : 'text-rose-600'} />
                     </button>
@@ -299,8 +320,8 @@ export default function App() {
             </button>
 
             <button 
-              onClick={handleLogout} 
-              className="text-xs text-slate-500 hover:text-red-600 transition-colors p-1" 
+              onClick={handleLogout}
+              className="text-xs text-slate-500 hover:text-red-600 transition-colors p-1"
               title="Sign Out"
             >
               <LogOut size={16} />
@@ -330,12 +351,11 @@ export default function App() {
               </button>
             )}
             <button 
-              onClick={() => setNavigationHistory([{ screen: 'dashboard', state: {} }])} 
+              onClick={() => setNavigationHistory([{ screen: 'dashboard', state: {} }])}
               className="flex items-center gap-1 hover:text-indigo-600 transition-colors"
             >
               <Home size={14} /> Dashboard
             </button>
-
             {selectedCoaching && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
@@ -392,7 +412,6 @@ export default function App() {
             }} 
           />
         )}
-
         {currentNav.screen === 'coaching' && selectedCoaching && (
           <CoachingView 
             coaching={selectedCoaching} 
@@ -405,7 +424,6 @@ export default function App() {
             onGoBack={goBack}
           />
         )}
-
         {currentNav.screen === 'classDetails' && selectedCoaching && (
           <ClassDetailsPage
             coachingId={selectedCoaching.id}
@@ -415,7 +433,6 @@ export default function App() {
             onOpenSubjectDetails={({ classId, subjectId }) => navigateTo('subjectDetails', { coaching: selectedCoaching, classId, subjectId })}
           />
         )}
-
         {currentNav.screen === 'subjectDetails' && selectedCoaching && (
           <SubjectDetailsPage
             coachingId={selectedCoaching.id}
@@ -426,7 +443,6 @@ export default function App() {
             onOpenClassDetails={(classId) => navigateTo('classDetails', { coaching: selectedCoaching, classId })}
           />
         )}
-
         {currentNav.screen === 'addStudent' && selectedCoaching && (
           <AddStudentPage 
             coachingId={selectedCoaching.id}
@@ -436,14 +452,12 @@ export default function App() {
             onGoBack={goBack}
           />
         )}
-
         {currentNav.screen === 'studentDetails' && selectedStudent && (
           <StudentDetailsPage 
             studentId={selectedStudent.id} 
             onBack={goBack} 
           />
         )}
-
         {currentNav.screen === 'payments' && (
           <UserPaymentsPage
             currentUser={currentUser}

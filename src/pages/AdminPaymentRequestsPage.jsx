@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { ArrowLeft, Check, XCircle, CreditCard, MessageSquare, History } from 'lucide-react';
+import { ArrowLeft, Check, XCircle, CreditCard, MessageSquare, History, Building2 } from 'lucide-react';
 
 export const AdminPaymentRequestsPage = ({ onBack }) => {
   const [payments, setPayments] = useState([]);
@@ -17,7 +17,6 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
       setPayments(list);
       setLoading(false);
     });
-
     return () => unsub();
   }, []);
 
@@ -29,14 +28,12 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
   const handleConfirmAction = async (e) => {
     e.preventDefault();
     if (!activeModal) return;
-
     const { payment, action } = activeModal;
     const isAccept = action === 'accept';
     const nowISO = new Date().toISOString();
-
     const currentHistory = payment.adminRemarksHistory || [];
     const newRemarkText = adminRemark || (isAccept ? 'Approved by Admin' : 'Rejected by Admin');
-    
+
     // Append current decision & remark to admin history thread
     const updatedHistory = [
       ...currentHistory,
@@ -48,9 +45,7 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
     ];
 
     try {
-      // FIX: Clean single document reference syntax
       const paymentRef = doc(db, 'payments', payment.id);
-
       await updateDoc(paymentRef, {
         status: isAccept ? 'accepted' : 'rejected',
         adminRemarks: newRemarkText,
@@ -58,7 +53,6 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
         userRead: false,
         updatedAt: nowISO
       });
-
       setActiveModal(null);
       setAdminRemark('');
     } catch (err) {
@@ -128,14 +122,21 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
                       </span>
                     </div>
 
+                    {/* Coaching / Tuition Information */}
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50/80 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-700">
+                      <Building2 size={14} className="shrink-0 text-indigo-600" />
+                      <span className="truncate">{p.coachingName || 'Tuition Center'}</span>
+                    </div>
+
                     <div>
                       <span className="text-[10px] font-extrabold uppercase opacity-70">
                         {monthName} {p.year}
                       </span>
-                      <p className="text-2xl font-black text-slate-900">₹{p.amount}</p>
+                      <p className="text-2xl font-black text-slate-900">₹ {p.amount}</p>
                     </div>
 
                     <div className="text-xs space-y-1 bg-white/70 p-3 rounded-xl border border-black/5">
+                      <p><strong>Coaching:</strong> {p.coachingName || 'N/A'}</p>
                       <p><strong>Details:</strong> {p.paymentDetails || 'N/A'}</p>
                       {p.userRemarks && <p><strong>User Remark:</strong> {p.userRemarks}</p>}
                     </div>
@@ -192,11 +193,11 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
               <MessageSquare size={18} className={activeModal.action === 'accept' ? 'text-emerald-600' : 'text-rose-600'} />
               {activeModal.action === 'accept' ? 'Accept Payment Request' : 'Reject Payment Request'}
             </h3>
-
-            <p className="text-xs text-slate-600">
-              User: <strong>{activeModal.payment.userName}</strong> (Amount: <strong>₹{activeModal.payment.amount}</strong>)
-            </p>
-
+            <div className="text-xs text-slate-600 space-y-0.5 bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <p>User: <strong>{activeModal.payment.userName}</strong></p>
+              <p>Coaching: <strong>{activeModal.payment.coachingName || 'Tuition Center'}</strong></p>
+              <p>Amount: <strong>₹ {activeModal.payment.amount}</strong></p>
+            </div>
             <form onSubmit={handleConfirmAction} className="space-y-3">
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
@@ -210,7 +211,6 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
-
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"

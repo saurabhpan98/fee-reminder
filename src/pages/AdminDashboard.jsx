@@ -9,7 +9,7 @@ import { ChatModal } from '../components/ChatModal';
 import { AdminPaymentRequestsPage } from './AdminPaymentRequestsPage';
 import { 
   Users, Bell, LogOut, MessageSquare, PauseCircle, 
-  PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, CreditCard 
+  PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, CreditCard, Calendar, ArrowUpDown
 } from 'lucide-react';
 
 export const AdminDashboard = ({ adminUser, onLogout }) => {
@@ -19,6 +19,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   const [userCoachings, setUserCoachings] = useState([]);
   const [userPayments, setUserPayments] = useState([]);
   const [adminCoachingFilter, setAdminCoachingFilter] = useState('all');
+  const [paymentSortOrder, setPaymentSortOrder] = useState('latest'); // 'latest' | 'oldest'
   const [viewingRequests, setViewingRequests] = useState(false);
 
   // Notification State
@@ -140,6 +141,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     setSelectedUser(user);
     setViewingRequests(false);
     setAdminCoachingFilter('all');
+    setPaymentSortOrder('latest');
     
     const coachings = await fetchCoachingsForUser(user);
     setUserCoachings(coachings);
@@ -147,7 +149,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     // Fetch user payment history
     const paySnap = await getDocs(query(collection(db, 'payments'), where('userId', '==', user.uid)));
     const userPayList = paySnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    userPayList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     setUserPayments(userPayList);
   };
 
@@ -210,6 +211,13 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     return p.coachingId === adminCoachingFilter;
   });
 
+  // Sort payments according to Billing Month/Year (e.g., Year * 12 + Month)
+  const sortedUserPayments = [...filteredUserPayments].sort((a, b) => {
+    const periodValueA = (Number(a.year) || 0) * 12 + (Number(a.month) || 0);
+    const periodValueB = (Number(b.year) || 0) * 12 + (Number(b.month) || 0);
+    return paymentSortOrder === 'latest' ? periodValueB - periodValueA : periodValueA - periodValueB;
+  });
+
   if (viewingRequests) {
     return (
       <div className="min-h-screen bg-slate-100/70 font-sans text-slate-800 pb-12 pt-6 px-4 sm:px-6">
@@ -227,7 +235,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
             <div className="p-2 bg-indigo-600 rounded-xl"><Users size={18}/></div>
             <h1 className="font-extrabold text-base tracking-tight">Admin System Dashboard</h1>
           </div>
-
           <div className="flex items-center gap-3 sm:gap-4">
             <button
               onClick={() => setViewingRequests(true)}
@@ -241,7 +248,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                 </span>
               )}
             </button>
-
             <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
@@ -254,7 +260,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   </span>
                 )}
               </button>
-
               {showNotificationDropdown && (
                 <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 text-slate-800">
                   <div className="px-4 py-2 border-b border-slate-100 font-extrabold text-xs text-slate-500">
@@ -274,12 +279,11 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                     </button>
                   ))}
                   {notifications.length === 0 && (
-                    <div className="p-4 text-center text-xs text-slate-400 font-medium">No unread messages</div>
+                    <div className="p-4 text-center text-slate-400 text-xs font-medium">No unread messages</div>
                   )}
                 </div>
               )}
             </div>
-
             <button
               onClick={onLogout}
               className="flex items-center gap-2 px-3.5 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white rounded-xl text-xs font-bold transition-all"
@@ -298,7 +302,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                 <h2 className="text-lg font-extrabold text-slate-900">Registered System Users</h2>
                 <p className="text-xs text-slate-500 mt-0.5">Click on any user row to manage profile, view payments, or chat</p>
               </div>
-
               <div className="flex items-center gap-2">
                 <Filter size={14} className="text-slate-400" />
                 <label className="text-xs font-bold text-slate-500">Filter:</label>
@@ -354,7 +357,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   ))}
                 </tbody>
               </table>
-
               {sortedUsers.length === 0 && (
                 <div className="p-8 text-center text-slate-400 text-xs font-medium">
                   No users found matching the selected filter.
@@ -387,6 +389,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   </div>
                   <p className="text-xs text-slate-500 mt-1 font-medium">{selectedUser.email}</p>
                 </div>
+
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => setChatPartner(selectedUser)}
@@ -430,16 +433,27 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                         <th className="px-4 py-3 font-bold">Coaching Center Name</th>
                         <th className="px-4 py-3 font-bold">Owner Name</th>
                         <th className="px-4 py-3 font-bold">Address</th>
+                        <th className="px-4 py-3 font-bold">Date Created</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                      {userCoachings.map(c => (
-                        <tr key={c.id}>
-                          <td className="px-4 py-3 font-bold text-slate-800">{c.name || c.coachingName || 'N/A'}</td>
-                          <td className="px-4 py-3 text-slate-600">{c.ownerName || c.teacherName || 'N/A'}</td>
-                          <td className="px-4 py-3 text-slate-500">{c.address || 'N/A'}</td>
-                        </tr>
-                      ))}
+                      {userCoachings.map(c => {
+                        const createdDate = c.createdAt 
+                          ? new Date(c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
+                          : 'N/A';
+
+                        return (
+                          <tr key={c.id}>
+                            <td className="px-4 py-3 font-bold text-slate-800">{c.name || c.coachingName || 'N/A'}</td>
+                            <td className="px-4 py-3 text-slate-600">{c.ownerName || c.teacherName || 'N/A'}</td>
+                            <td className="px-4 py-3 text-slate-500">{c.address || 'N/A'}</td>
+                            <td className="px-4 py-3 font-bold text-indigo-700 flex items-center gap-1.5">
+                              <Calendar size={13} className="text-indigo-500 shrink-0" />
+                              {createdDate}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                   {userCoachings.length === 0 && (
@@ -456,25 +470,42 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
                     <CreditCard size={16} className="text-indigo-600" /> User Payment Submissions ({userPayments.length})
                   </h3>
-
-                  {userCoachings.length > 1 && (
+                  
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Month-Year Sort Controller */}
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
-                      <Filter size={13} className="text-slate-400" />
-                      <label className="font-bold text-slate-500">Filter Coaching:</label>
+                      <ArrowUpDown size={13} className="text-slate-400" />
+                      <label className="font-bold text-slate-500">Sort Month/Year:</label>
                       <select
-                        value={adminCoachingFilter}
-                        onChange={(e) => setAdminCoachingFilter(e.target.value)}
+                        value={paymentSortOrder}
+                        onChange={(e) => setPaymentSortOrder(e.target.value)}
                         className="bg-transparent border-none font-bold text-slate-800 outline-none cursor-pointer"
                       >
-                        <option value="all">All Coachings ({userCoachings.length})</option>
-                        {userCoachings.map(c => (
-                          <option key={c.id} value={c.id}>
-                            {c.name || c.coachingName}
-                          </option>
-                        ))}
+                        <option value="latest">Latest Month/Year First</option>
+                        <option value="oldest">Oldest Month/Year First</option>
                       </select>
                     </div>
-                  )}
+
+                    {/* Coaching Filter */}
+                    {userCoachings.length > 1 && (
+                      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
+                        <Filter size={13} className="text-slate-400" />
+                        <label className="font-bold text-slate-500">Filter Coaching:</label>
+                        <select
+                          value={adminCoachingFilter}
+                          onChange={(e) => setAdminCoachingFilter(e.target.value)}
+                          className="bg-transparent border-none font-bold text-slate-800 outline-none cursor-pointer"
+                        >
+                          <option value="all">All Coachings ({userCoachings.length})</option>
+                          {userCoachings.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.name || c.coachingName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -492,14 +523,13 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                      {filteredUserPayments.map(p => {
+                      {sortedUserPayments.map(p => {
                         const submissionDate = p.createdAt 
-                          ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                          ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
                           : '-';
-
                         const isAccepted = p.status === 'accepted';
                         const acceptanceDate = isAccepted && p.updatedAt 
-                          ? new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                          ? new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
                           : '-';
 
                         return (
@@ -510,7 +540,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                             <td className="px-4 py-3 font-bold text-slate-800">
                               {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
                             </td>
-                            <td className="px-4 py-3 font-black text-slate-900">₹{p.amount}</td>
+                            <td className="px-4 py-3 font-black text-slate-900">₹ {p.amount}</td>
                             <td className="px-4 py-3 font-bold text-slate-700">
                               {submissionDate}
                             </td>
@@ -533,7 +563,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                       })}
                     </tbody>
                   </table>
-                  {filteredUserPayments.length === 0 && (
+                  {sortedUserPayments.length === 0 && (
                     <div className="p-6 text-center text-slate-400 text-xs font-medium">
                       No payment submissions found matching the selected filter.
                     </div>
