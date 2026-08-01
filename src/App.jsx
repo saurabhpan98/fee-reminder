@@ -122,7 +122,8 @@ export default function App() {
     signOut(auth);
     setNavigationHistory([{ screen: 'dashboard', state: {} }]);
     setShowUserChat(false);
-    setShowAuthScreen(false);
+    // Explicitly navigate to the Login / Auth page on logout
+    setShowAuthScreen(true);
   };
 
   const navigateTo = (screen, state = {}) => {
@@ -155,7 +156,7 @@ export default function App() {
     );
   }
 
-  // If user is not logged in, show Landing Page or Auth Modal Page
+  // If user is not logged in, show Auth Screen or Landing Page
   if (!currentUser) {
     if (showAuthScreen) {
       return (
