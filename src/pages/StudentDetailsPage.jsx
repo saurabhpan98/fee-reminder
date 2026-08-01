@@ -6,19 +6,20 @@ import {
   downloadPaymentReceiptPDF, 
   downloadClassSubjectRangeReceiptPDF 
 } from '../utils/exportUtils';
+import { getUserPlanConfig } from '../utils/planUtils';
 import { 
-  Phone, Mail, MapPin, Trash2, AlertTriangle, ArrowLeft, 
-  UserCheck, UserMinus, DollarSign, Calendar, Edit3, X, Check, 
-  BookOpen, Sparkles, FileText, MessageCircle
+  Phone, Mail, MapPin, Trash2, AlertTriangle, ArrowLeft,
+  UserCheck, UserMinus, DollarSign, Calendar, Edit3, X, Check,
+  BookOpen, Sparkles, FileText, MessageCircle, Lock
 } from 'lucide-react';
 
-export const StudentDetailsPage = ({ studentId, onBack }) => {
+export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, onBack }) => {
   const [student, setStudent] = useState(null);
   const [coaching, setCoaching] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editFormData, setEditFormData] = useState({ name: '', phone: '', email: '', address: '' });
 
-  // Original Fee Ledger Modal State
+  // Fee Ledger Modal State
   const [activeModalEnrollment, setActiveModalEnrollment] = useState(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -46,6 +47,8 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
   const [endMonth, setEndMonth] = useState(new Date().getMonth() + 1);
   const [endYear, setEndYear] = useState(new Date().getFullYear());
 
+  const planConfig = getUserPlanConfig(userData);
+
   useEffect(() => {
     fetchStudent();
   }, [studentId]);
@@ -61,7 +64,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
         email: data.email || '',
         address: data.address || ''
       });
-
       if (data.coachingId) {
         const coachingSnap = await getDoc(doc(db, 'coachings', data.coachingId));
         if (coachingSnap.exists()) {
@@ -78,7 +80,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
       const feeSnap = await getDocs(feeQ);
       const deletePromises = feeSnap.docs.map(feeDoc => deleteDoc(doc(db, 'feeRecords', feeDoc.id)));
       await Promise.all(deletePromises);
-
       await deleteDoc(doc(db, 'students', studentId));
       setShowDeleteModal(false);
       onBack();
@@ -121,7 +122,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
   const fetchFeeRecord = async (enrollmentId, year, month) => {
     const recordId = `${studentId}_${enrollmentId}_${year}_${month}`;
     const snap = await getDoc(doc(db, 'feeRecords', recordId));
-    
     if (snap.exists()) {
       setFeeRecord(snap.data());
     } else {
@@ -139,10 +139,8 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
 
   const handleSaveFee = async (statusOverride = null, amountOverride = null) => {
     if (!activeModalEnrollment) return;
-
     const finalStatus = statusOverride || feeRecord.status;
     let finalAmountPaid = amountOverride !== null ? amountOverride : Number(feeRecord.amountPaid || 0);
-
     if (finalStatus === 'paid') {
       finalAmountPaid = activeModalEnrollment.monthlyFee;
     } else if (finalStatus === 'unpaid') {
@@ -161,13 +159,16 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
       remark: feeRecord.remark || '',
       updatedAt: new Date().toISOString()
     });
-
     setActiveModalEnrollment(null);
     fetchStudent();
   };
 
-  // WhatsApp Helpers
+  // Gated WhatsApp Modal Trigger
   const openWhatsappModal = async (enrollment) => {
+    if (!planConfig.allowWhatsapp) {
+      onOpenUpgradeModal();
+      return;
+    }
     setWhatsappModal({ enrollment });
     await fetchWaFeeRecord(enrollment.enrollmentId, waYear, waMonth);
   };
@@ -192,10 +193,8 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
 
   const handleSendWhatsappMessage = () => {
     if (!whatsappModal || !student) return;
-
     const { enrollment } = whatsappModal;
-    
-    // Safety Guard
+
     if (isMonthBeforeEnrollment(enrollment, waMonth, waYear)) {
       alert("Cannot send WhatsApp message for a month when the student was not enrolled.");
       return;
@@ -205,39 +204,33 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
     const monthlyFee = enrollment.monthlyFee || 0;
     const amountPaid = waFeeRecord.amountPaid || (waFeeRecord.status === 'paid' ? monthlyFee : 0);
     const balanceLeft = Math.max(0, monthlyFee - amountPaid);
-
+    
     let statusText = 'Unpaid';
     if (waFeeRecord.status === 'paid') statusText = 'Fully Paid';
     if (waFeeRecord.status === 'partially_paid') statusText = 'Partially Paid';
 
-    // Format Message Text
     let message = `*Fee Statement - ${coaching?.name || 'Tuition Center'}*\n\n`;
     message += `Dear *${student.name}*,\n`;
     message += `Here is your fee summary for *${enrollment.className} (${enrollment.subjectName})*:\n\n`;
-    message += `🗓 *Period:* ${monthName} ${waYear}\n`;
-    message += `💵 *Monthly Tuition Fee:* ₹${monthlyFee}\n`;
-    message += `✅ *Amount Paid:* ₹${amountPaid}\n`;
-    message += `📌 *Remaining Balance Due:* ₹${balanceLeft}\n`;
-    message += `📊 *Status:* ${statusText}\n`;
-
+    message += `  *Period:* ${monthName} ${waYear}\n`;
+    message += `  *Monthly Tuition Fee:* ₹ ${monthlyFee}\n`;
+    message += `  *Amount Paid:* ₹ ${amountPaid}\n`;
+    message += `  *Remaining Balance Due:* ₹ ${balanceLeft}\n`;
+    message += `  *Status:* ${statusText}\n`;
     if (waFeeRecord.remark) {
-      message += `📝 *Remark:* ${waFeeRecord.remark}\n`;
+      message += `  *Remark:* ${waFeeRecord.remark}\n`;
     }
-
     message += `\nThank you!`;
 
-    // Clean phone number for WhatsApp link
     let cleanPhone = (student.phone || '').replace(/[^0-9]/g, '');
     if (cleanPhone.length === 10) {
       cleanPhone = `91${cleanPhone}`;
     }
-
     const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
     window.open(waUrl, '_blank');
     setWhatsappModal(null);
   };
 
-  // Helper: Checks if student was NOT enrolled during a given month/year
   const isMonthBeforeEnrollment = (enrollment, month, year) => {
     if (!enrollment || !enrollment.joinedAt) return false;
     const joinDate = new Date(enrollment.joinedAt);
@@ -246,10 +239,9 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
     return selectedDate < joinMonthStart;
   };
 
-  // Download Class-Subject Specific Receipt with Validation & Dynamic Teacher Lookup
+  // Gated PDF Receipt Generation
   const handleGenerateClassSubjectReceipt = async () => {
     if (!student || !coaching || !receiptModal) return;
-
     const { enrollment } = receiptModal;
 
     let teacherName = enrollment.teacherName || 'N/A';
@@ -273,7 +265,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
         alert("Cannot download receipt for month when student was not enrolled");
         return;
       }
-
       const feeSnap = await getDocs(query(collection(db, 'feeRecords'), where('studentId', '==', studentId)));
       const allFeeRecords = feeSnap.docs.map(d => d.data());
       const rec = allFeeRecords.find(f => f.enrollmentId === enrollment.enrollmentId && f.month === Number(singleMonth) && f.year === Number(singleYear));
@@ -292,14 +283,18 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
         feeRecord: rec || { status: 'unpaid', amountPaid: 0 }
       });
     } else {
+      // Range Date Receipt (Pro Feature Gate Check)
+      if (!planConfig.allowRangeReceipts) {
+        onOpenUpgradeModal();
+        return;
+      }
+
       const startVal = Number(startYear) * 12 + Number(startMonth);
       const endVal = Number(endYear) * 12 + Number(endMonth);
-
       if (startVal > endVal) {
         alert("Invalid date range selection.");
         return;
       }
-
       if (isMonthBeforeEnrollment(enrollment, startMonth, startYear)) {
         alert("Cannot download receipt for month when student was not enrolled");
         return;
@@ -312,7 +307,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
       for (let y = Number(startYear); y <= Number(endYear); y++) {
         const mStart = (y === Number(startYear)) ? Number(startMonth) : 1;
         const mEnd = (y === Number(endYear)) ? Number(endMonth) : 12;
-
         for (let m = mStart; m <= mEnd; m++) {
           const currentVal = y * 12 + m;
           if (currentVal >= startVal && currentVal <= endVal) {
@@ -340,7 +334,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
         dateRangeText: `${startMonth}/${startYear} to ${endMonth}/${endYear}`
       });
     }
-
     setReceiptModal(null);
   };
 
@@ -387,7 +380,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
       {/* Main Profile Card */}
       <div className="relative overflow-hidden bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/60 p-6 sm:p-8 shadow-sm transition-all hover:shadow-md">
         <div className="absolute top-0 right-0 -mt-12 -mr-12 w-64 h-64 bg-gradient-to-br from-indigo-100/40 via-purple-50/20 to-transparent rounded-full blur-2xl pointer-events-none" />
-
+        
         {!isEditing ? (
           <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-start gap-4">
@@ -396,7 +389,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
               </div>
               <div className="space-y-1.5">
                 <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight">{student.name}</h1>
-                
                 <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium text-slate-500 pt-0.5">
                   <span className="flex items-center gap-1.5 bg-slate-100/80 px-2.5 py-1 rounded-lg">
                     <Phone className="w-3.5 h-3.5 text-indigo-500" /> {student.phone}
@@ -512,7 +504,6 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
             <h3 className="font-extrabold text-slate-800 text-base tracking-tight">Class & Subject Enrollments</h3>
             <p className="text-xs text-slate-500 mt-0.5">Manage subject status, record payments, and send fee messages</p>
           </div>
-          
           <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full font-bold text-xs">
             {student.enrollments?.length || 0} Total Subject(s)
           </span>
@@ -528,7 +519,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
               >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-800 text-sm">{enr.className} — {enr.subjectName}</span>
+                    <span className="font-bold text-slate-800 text-sm">{enr.className} - {enr.subjectName}</span>
                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                       isActive 
                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80' 
@@ -538,9 +529,8 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                       {isActive ? 'Active' : 'Unassigned'}
                     </span>
                   </div>
-                  
                   <div className="flex items-center gap-4 text-xs text-slate-500">
-                    <span>Monthly Fee: <strong className="text-slate-700">₹{enr.monthlyFee}</strong></span>
+                    <span>Monthly Fee: <strong className="text-slate-700">₹ {enr.monthlyFee}</strong></span>
                     {enr.joinedAt && (
                       <>
                         <span>•</span>
@@ -551,13 +541,15 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
-                  {/* WhatsApp Fee Message Button */}
+                  {/* WhatsApp Fee Message Button (Gated) */}
                   <button
                     onClick={() => openWhatsappModal(enr)}
                     className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold text-xs rounded-xl border border-emerald-200 transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 shadow-xs"
                     title="Send WhatsApp Fee Details"
                   >
-                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600" /> WhatsApp
+                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600" /> 
+                    <span>WhatsApp</span>
+                    {!planConfig.allowWhatsapp && <Lock size={12} className="text-amber-500" />}
                   </button>
 
                   {/* Interactive Fee Ledger Button */}
@@ -577,7 +569,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                     <FileText className="w-3.5 h-3.5 text-slate-500" /> Receipt
                   </button>
 
-                  {/* Interactive Re-enroll / Un-enroll Toggle Button */}
+                  {/* Toggle Enrollment Status Button */}
                   <button
                     onClick={() => handleToggleEnrollmentStatus(enr.enrollmentId)}
                     className={`px-3.5 py-2 font-bold text-xs rounded-xl transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 ${
@@ -655,7 +647,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                   <Calendar className="w-4 h-4 text-indigo-600" /> Monthly Fee Ledger
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {activeModalEnrollment.className} — {activeModalEnrollment.subjectName} (₹{activeModalEnrollment.monthlyFee}/month)
+                  {activeModalEnrollment.className} - {activeModalEnrollment.subjectName} (₹ {activeModalEnrollment.monthlyFee}/month)
                 </p>
               </div>
               <button 
@@ -675,6 +667,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
               >
                 {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
               </select>
+
               <select 
                 value={selectedMonth} 
                 onChange={(e) => handleYearMonthChange(selectedYear, e.target.value)}
@@ -697,13 +690,13 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                 {/* Due Breakdown Card */}
                 <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-indigo-50/30 border border-slate-200/80 space-y-1.5">
                   <div className="flex justify-between text-xs font-medium text-slate-600">
-                    <span>Monthly Tuition Fee:</span> <span className="font-bold text-slate-800">₹{monthlyFee}</span>
+                    <span>Monthly Tuition Fee:</span> <span className="font-bold text-slate-800">₹ {monthlyFee}</span>
                   </div>
                   <div className="flex justify-between text-xs font-medium text-emerald-600">
-                    <span>Amount Paid:</span> <span className="font-bold">₹{currentPaid}</span>
+                    <span>Amount Paid:</span> <span className="font-bold">₹ {currentPaid}</span>
                   </div>
                   <div className="flex justify-between text-xs font-bold text-rose-600 border-t border-slate-200/80 pt-1.5">
-                    <span>Remaining Balance:</span> <span className="font-extrabold text-sm">₹{amountLeft}</span>
+                    <span>Remaining Balance:</span> <span className="font-extrabold text-sm">₹ {amountLeft}</span>
                   </div>
                 </div>
 
@@ -750,7 +743,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                     onClick={() => handleSaveFee('paid', monthlyFee)}
                     className="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 transition-all flex items-center justify-center gap-1.5"
                   >
-                    <Check className="w-3.5 h-3.5" /> Pay Remaining Balance (₹{amountLeft})
+                    <Check className="w-3.5 h-3.5" /> Pay Remaining Balance (₹ {amountLeft})
                   </button>
                 )}
               </div>
@@ -810,6 +803,7 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                   ))}
                 </select>
               </div>
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Year</label>
                 <select
@@ -835,9 +829,9 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
               <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 text-xs text-slate-700 space-y-1">
                 <p className="font-bold text-[11px] text-slate-400 uppercase tracking-wider mb-1">Preview Message Payload:</p>
                 <p><strong>Period:</strong> {new Date(0, waMonth - 1).toLocaleString('default', { month: 'long' })} {waYear}</p>
-                <p><strong>Monthly Fee:</strong> ₹{whatsappModal.enrollment.monthlyFee}</p>
-                <p><strong>Amount Paid:</strong> ₹{waFeeRecord.amountPaid || (waFeeRecord.status === 'paid' ? whatsappModal.enrollment.monthlyFee : 0)}</p>
-                <p><strong>Balance Left:</strong> ₹{Math.max(0, whatsappModal.enrollment.monthlyFee - (waFeeRecord.amountPaid || (waFeeRecord.status === 'paid' ? whatsappModal.enrollment.monthlyFee : 0)))}</p>
+                <p><strong>Monthly Fee:</strong> ₹ {whatsappModal.enrollment.monthlyFee}</p>
+                <p><strong>Amount Paid:</strong> ₹ {waFeeRecord.amountPaid || (waFeeRecord.status === 'paid' ? whatsappModal.enrollment.monthlyFee : 0)}</p>
+                <p><strong>Balance Left:</strong> ₹ {Math.max(0, whatsappModal.enrollment.monthlyFee - (waFeeRecord.amountPaid || (waFeeRecord.status === 'paid' ? whatsappModal.enrollment.monthlyFee : 0)))}</p>
                 <p><strong>Status:</strong> {waFeeRecord.status === 'paid' ? 'Fully Paid' : waFeeRecord.status === 'partially_paid' ? 'Partially Paid' : 'Unpaid'}</p>
                 {waFeeRecord.remark && <p><strong>Remark:</strong> {waFeeRecord.remark}</p>}
               </div>
@@ -888,10 +882,19 @@ export const StudentDetailsPage = ({ studentId, onBack }) => {
                 Single Month
               </button>
               <button
-                onClick={() => setReceiptMode('range')}
-                className={`py-2 rounded-xl transition-all ${receiptMode === 'range' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'}`}
+                onClick={() => {
+                  if (!planConfig.allowRangeReceipts) {
+                    onOpenUpgradeModal();
+                  } else {
+                    setReceiptMode('range');
+                  }
+                }}
+                className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                  receiptMode === 'range' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'
+                }`}
               >
-                Range of Months
+                <span>Range of Months</span>
+                {!planConfig.allowRangeReceipts && <Lock size={12} className="text-amber-500" />}
               </button>
             </div>
 

@@ -2,9 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
-import { Building, Plus } from 'lucide-react';
+import { Building, Plus, Lock } from 'lucide-react';
+import { canCreateCoaching, getUserPlanConfig } from '../../utils/planUtils';
 
-export const TeacherDashboard = ({ userId, onSelectCoaching }) => {
+export const TeacherDashboard = ({ userId, userData, onOpenUpgradeModal, onSelectCoaching }) => {
   const [coachings, setCoachings] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [formData, setFormData] = useState({ name: '', ownerName: '', address: '' });
@@ -19,8 +20,21 @@ export const TeacherDashboard = ({ userId, onSelectCoaching }) => {
     setCoachings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
   };
 
+  const handleOpenAddModal = () => {
+    if (!canCreateCoaching(userData, coachings.length)) {
+      onOpenUpgradeModal();
+    } else {
+      setShowAddModal(true);
+    }
+  };
+
   const handleCreate = async (e) => {
     e.preventDefault();
+    if (!canCreateCoaching(userData, coachings.length)) {
+      alert("Plan limit reached. Please upgrade to Pro Plan.");
+      return;
+    }
+
     await addDoc(collection(db, 'coachings'), {
       ...formData,
       teacherId: userId,
@@ -31,18 +45,28 @@ export const TeacherDashboard = ({ userId, onSelectCoaching }) => {
     fetchCoachings();
   };
 
+  const planConfig = getUserPlanConfig(userData);
+  const canAddMoreCoaching = canCreateCoaching(userData, coachings.length);
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Your Coaching Institutes</h1>
-          <p className="text-xs text-slate-500 mt-1">Select a coaching to manage classes, subjects, and fees</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Managing {coachings.length} of {planConfig.maxCoachings} allowed Coaching(s) ({planConfig.name})
+          </p>
         </div>
         <button
-          onClick={() => setShowAddModal(true)}
-          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-indigo-100"
+          onClick={handleOpenAddModal}
+          className={`px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md ${
+            canAddMoreCoaching 
+              ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100'
+              : 'bg-amber-500 hover:bg-amber-600 text-slate-900 shadow-amber-200 font-extrabold'
+          }`}
         >
-          <Plus size={16} /> New Coaching
+          {canAddMoreCoaching ? <Plus size={16} /> : <Lock size={16} />}
+          {canAddMoreCoaching ? 'New Coaching' : 'Upgrade to Add Coaching'}
         </button>
       </div>
 
@@ -53,7 +77,7 @@ export const TeacherDashboard = ({ userId, onSelectCoaching }) => {
           </div>
           <p className="text-slate-600 font-medium">No coaching institutes added yet.</p>
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={handleOpenAddModal}
             className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold"
           >
             Add Your First Coaching
@@ -69,7 +93,7 @@ export const TeacherDashboard = ({ userId, onSelectCoaching }) => {
             >
               <h3 className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{c.name}</h3>
               <p className="text-xs text-slate-400 mt-1">Owner: {c.ownerName}</p>
-              <p className="text-xs text-slate-500 mt-3 truncate">📍 {c.address}</p>
+              <p className="text-xs text-slate-500 mt-3 truncate">{c.address}</p>
             </div>
           ))}
         </div>

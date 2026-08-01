@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { ArrowLeft, Check, XCircle, CreditCard, MessageSquare, History, Building2 } from 'lucide-react';
+import { ArrowLeft, Check, XCircle, CreditCard, MessageSquare, History, Building2, Sparkles } from 'lucide-react';
+import { PLANS } from '../utils/planUtils';
 
 export const AdminPaymentRequestsPage = ({ onBack }) => {
   const [payments, setPayments] = useState([]);
@@ -53,6 +54,15 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
         userRead: false,
         updatedAt: nowISO
       });
+
+      // If this was a plan upgrade request and it was accepted, update user's plan to Pro
+      if (isAccept && payment.isPlanUpgradeRequest && payment.userId) {
+        const userRef = doc(db, 'users', payment.userId);
+        await updateDoc(userRef, {
+          plan: payment.targetPlan || PLANS.PRO
+        });
+      }
+
       setActiveModal(null);
       setAdminRemark('');
     } catch (err) {
@@ -78,7 +88,7 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
         <div className="flex justify-between items-center border-b border-slate-100 pb-4">
           <div>
             <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Payment Verification Requests</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Review, accept, or reject user fee payment submissions</p>
+            <p className="text-xs text-slate-500 mt-0.5">Review, accept, or reject user fee payment submissions & plan upgrades</p>
           </div>
           <span className="px-3 py-1 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-full border border-indigo-100">
             {activeRequests.length} Pending / Rejected
@@ -122,11 +132,18 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
                       </span>
                     </div>
 
-                    {/* Coaching / Tuition Information */}
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50/80 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-700">
-                      <Building2 size={14} className="shrink-0 text-indigo-600" />
-                      <span className="truncate">{p.coachingName || 'Tuition Center'}</span>
-                    </div>
+                    {/* Coaching / Plan Upgrade Badge */}
+                    {p.isPlanUpgradeRequest ? (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-extrabold shadow-xs">
+                        <Sparkles size={14} className="shrink-0 text-amber-300" />
+                        <span>PLAN UPGRADE REQUEST → PRO ACADEMY</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50/80 border border-indigo-100 rounded-xl text-xs font-bold text-indigo-700">
+                        <Building2 size={14} className="shrink-0 text-indigo-600" />
+                        <span className="truncate">{p.coachingName || 'Tuition Center'}</span>
+                      </div>
+                    )}
 
                     <div>
                       <span className="text-[10px] font-extrabold uppercase opacity-70">
@@ -136,7 +153,6 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
                     </div>
 
                     <div className="text-xs space-y-1 bg-white/70 p-3 rounded-xl border border-black/5">
-                      <p><strong>Coaching:</strong> {p.coachingName || 'N/A'}</p>
                       <p><strong>Details:</strong> {p.paymentDetails || 'N/A'}</p>
                       {p.userRemarks && <p><strong>User Remark:</strong> {p.userRemarks}</p>}
                     </div>
@@ -197,6 +213,11 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
               <p>User: <strong>{activeModal.payment.userName}</strong></p>
               <p>Coaching: <strong>{activeModal.payment.coachingName || 'Tuition Center'}</strong></p>
               <p>Amount: <strong>₹ {activeModal.payment.amount}</strong></p>
+              {activeModal.payment.isPlanUpgradeRequest && (
+                <p className="text-indigo-600 font-extrabold pt-1">
+                  ★ Will automatically upgrade user plan to PRO ACADEMY upon acceptance!
+                </p>
+              )}
             </div>
             <form onSubmit={handleConfirmAction} className="space-y-3">
               <div>
@@ -205,7 +226,7 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
                 </label>
                 <textarea
                   rows="3"
-                  placeholder={activeModal.action === 'accept' ? 'e.g. Verified in Bank Account' : 'e.g. Transaction ID invalid'}
+                  placeholder={activeModal.action === 'accept' ? 'e.g. Activated Pro Plan' : 'e.g. Transaction ID invalid'}
                   value={adminRemark}
                   onChange={(e) => setAdminRemark(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"

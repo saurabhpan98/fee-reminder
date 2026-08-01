@@ -7,9 +7,10 @@ import {
 } from 'firebase/firestore';
 import { ChatModal } from '../components/ChatModal';
 import { AdminPaymentRequestsPage } from './AdminPaymentRequestsPage';
+import { PLAN_CONFIG, PLANS } from '../utils/planUtils';
 import { 
   Users, Bell, LogOut, MessageSquare, PauseCircle, 
-  PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, CreditCard, Calendar, ArrowUpDown
+  PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, CreditCard, Calendar, ArrowUpDown, Sparkles
 } from 'lucide-react';
 
 export const AdminDashboard = ({ adminUser, onLogout }) => {
@@ -161,6 +162,20 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     setSelectedUser(prev => ({ ...prev, status: newStatus }));
   };
 
+  const handleAdminChangePlan = async (newPlanId) => {
+    if (!selectedUser) return;
+    try {
+      await updateDoc(doc(db, 'users', selectedUser.uid), {
+        plan: newPlanId
+      });
+      setSelectedUser(prev => ({ ...prev, plan: newPlanId }));
+      alert(`User plan successfully updated to ${PLAN_CONFIG[newPlanId]?.name}`);
+    } catch (err) {
+      console.error("Error changing user plan:", err);
+      alert("Failed to update user plan: " + err.message);
+    }
+  };
+
   const handleConfirmDeleteUser = async () => {
     if (!selectedUser) return;
     setIsProcessing(true);
@@ -211,7 +226,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     return p.coachingId === adminCoachingFilter;
   });
 
-  // Sort payments according to Billing Month/Year (e.g., Year * 12 + Month)
+  // Sort payments according to Billing Month/Year
   const sortedUserPayments = [...filteredUserPayments].sort((a, b) => {
     const periodValueA = (Number(a.year) || 0) * 12 + (Number(a.month) || 0);
     const periodValueB = (Number(b.year) || 0) * 12 + (Number(b.month) || 0);
@@ -225,6 +240,8 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
       </div>
     );
   }
+
+  const selectedUserPlanConfig = PLAN_CONFIG[selectedUser?.plan || PLANS.STARTER];
 
   return (
     <div className="min-h-screen bg-slate-100/70 font-sans text-slate-800 pb-12">
@@ -300,7 +317,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-lg font-extrabold text-slate-900">Registered System Users</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Click on any user row to manage profile, view payments, or chat</p>
+                <p className="text-xs text-slate-500 mt-0.5">Click on any user row to manage profile, view payments, or change plan</p>
               </div>
               <div className="flex items-center gap-2">
                 <Filter size={14} className="text-slate-400" />
@@ -324,37 +341,48 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   <tr>
                     <th className="px-5 py-3.5 font-bold">Name</th>
                     <th className="px-5 py-3.5 font-bold">Email</th>
-                    <th className="px-5 py-3.5 font-bold">Coachings/Tuitions</th>
+                    <th className="px-5 py-3.5 font-bold">Active Plan</th>
+                    <th className="px-5 py-3.5 font-bold">Coachings</th>
                     <th className="px-5 py-3.5 font-bold">Account Status</th>
                     <th className="px-5 py-3.5 font-bold text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-xs">
-                  {sortedUsers.map((u) => (
-                    <tr
-                      key={u.uid}
-                      onClick={() => handleOpenUserProfile(u)}
-                      className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
-                    >
-                      <td className="px-5 py-4 font-bold text-slate-900">{u.name || 'Unnamed User'}</td>
-                      <td className="px-5 py-4 text-slate-600">{u.email}</td>
-                      <td className="px-5 py-4 font-bold text-indigo-600">{u.coachingCount ?? 0} Registered</td>
-                      <td className="px-5 py-4">
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                          u.status === 'stopped' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
-                          u.status === 'deleted' ? 'bg-rose-50 text-rose-600 border border-rose-200' :
-                          'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                        }`}>
-                          {u.status || 'active'}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        <button className="px-3.5 py-1.5 border border-slate-200 rounded-xl font-bold hover:bg-white text-slate-600">
-                          Manage Profile
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {sortedUsers.map((u) => {
+                    const planInfo = PLAN_CONFIG[u.plan || PLANS.STARTER];
+                    return (
+                      <tr
+                        key={u.uid}
+                        onClick={() => handleOpenUserProfile(u)}
+                        className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
+                      >
+                        <td className="px-5 py-4 font-bold text-slate-900">{u.name || 'Unnamed User'}</td>
+                        <td className="px-5 py-4 text-slate-600">{u.email}</td>
+                        <td className="px-5 py-4 font-bold">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                            u.plan === PLANS.PRO ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {planInfo.name}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 font-bold text-indigo-600">{u.coachingCount ?? 0} Registered</td>
+                        <td className="px-5 py-4">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                            u.status === 'stopped' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
+                            u.status === 'deleted' ? 'bg-rose-50 text-rose-600 border border-rose-200' :
+                            'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                          }`}>
+                            {u.status || 'active'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <button className="px-3.5 py-1.5 border border-slate-200 rounded-xl font-bold hover:bg-white text-slate-600">
+                            Manage Profile
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {sortedUsers.length === 0 && (
@@ -418,6 +446,31 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                       <Trash2 size={14} /> Delete Account
                     </button>
                   )}
+                </div>
+              </div>
+
+              {/* ADMIN PLAN MANAGEMENT BOX */}
+              <div className="p-5 bg-slate-900 text-white rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md">
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase text-indigo-400">Current User Subscribed Plan</span>
+                  <h3 className="text-lg font-extrabold text-white mt-0.5 flex items-center gap-2">
+                    <Sparkles size={16} className="text-amber-400" /> {selectedUserPlanConfig.name}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Max Coachings: {selectedUserPlanConfig.maxCoachings} | Max Students: {selectedUserPlanConfig.maxStudents === Infinity ? 'Unlimited' : selectedUserPlanConfig.maxStudents}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-300">Set Plan:</label>
+                  <select
+                    value={selectedUser.plan || PLANS.STARTER}
+                    onChange={(e) => handleAdminChangePlan(e.target.value)}
+                    className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-white outline-none cursor-pointer"
+                  >
+                    <option value={PLANS.STARTER}>Starter Teacher (Free)</option>
+                    <option value={PLANS.PRO}>Pro Academy (₹1,200/mo)</option>
+                  </select>
                 </div>
               </div>
 

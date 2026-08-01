@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, onSnapshot, collection, query, where } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { AuthPage } from './pages/AuthPage';
 import { LandingPage } from './pages/LandingPage';
 import { AdminDashboard } from './pages/AdminDashboard';
@@ -14,10 +14,12 @@ import { UserPaymentsPage } from './pages/UserPaymentsPage';
 import { CoachingView } from './components/coaching/CoachingView';
 import { TeacherDashboard } from './components/dashboard/TeacherDashboard';
 import { ChatModal } from './components/ChatModal';
+import { UpgradePlanModal } from './components/common/UpgradePlanModal';
+import { getUserPlanConfig, PLANS } from './utils/planUtils';
 import { 
   LogOut, BookOpen, User, ChevronRight, 
   Home, ArrowLeft, MessageSquare, ShieldAlert, 
-  Bell, CreditCard, MoreVertical, Shield, Calendar, Mail
+  Bell, CreditCard, MoreVertical, Shield, Calendar, Mail, Sparkles, CheckCircle2, Lock
 } from 'lucide-react';
 
 const ADMIN_EMAIL = 'saurabh@gmail.com';
@@ -27,14 +29,15 @@ const ADMIN_ACCOUNT = {
   name: 'System Admin'
 };
 
-// Internal Page Component: User Profile Details View
-const UserProfileView = ({ userData, currentUser, onBack }) => {
+// Internal Page Component: User Profile Details View with Plan Details
+const UserProfileView = ({ userData, currentUser, onBack, onOpenUpgradeModal }) => {
+  const planConfig = getUserPlanConfig(userData);
   const createdDate = userData?.createdAt 
     ? new Date(userData.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
     : 'N/A';
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300">
+    <div className="max-w-4xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300">
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
@@ -45,6 +48,7 @@ const UserProfileView = ({ userData, currentUser, onBack }) => {
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-200/70 p-6 sm:p-8 shadow-xs space-y-6">
+        {/* Profile Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-6">
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white font-extrabold text-2xl flex items-center justify-center shadow-md shadow-indigo-100 shrink-0">
@@ -67,6 +71,55 @@ const UserProfileView = ({ userData, currentUser, onBack }) => {
               </div>
               <p className="text-xs text-slate-500 font-medium mt-1">{currentUser?.email}</p>
             </div>
+          </div>
+        </div>
+
+        {/* PLAN SECTION */}
+        <div className="p-6 rounded-3xl bg-slate-900 text-white space-y-4 shadow-xl relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+            <div>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-400">Current Subscribed Plan</span>
+              <h2 className="text-xl font-extrabold text-white mt-0.5 flex items-center gap-2">
+                <Sparkles size={18} className="text-amber-400" /> {planConfig.name}
+              </h2>
+            </div>
+
+            {planConfig.id === PLANS.STARTER ? (
+              <button
+                onClick={onOpenUpgradeModal}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-indigo-500/30 transition-all hover:scale-105"
+              >
+                Upgrade to Pro Academy
+              </button>
+            ) : (
+              <span className="px-3.5 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-extrabold uppercase">
+                Active Pro Plan
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-medium pt-1">
+            <div className="space-y-2">
+              <p className="text-[11px] font-bold text-slate-400 uppercase">Included Features & Limits:</p>
+              {planConfig.features.map((feat, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-emerald-400">
+                  <CheckCircle2 size={14} className="shrink-0" />
+                  <span>{feat}</span>
+                </div>
+              ))}
+            </div>
+
+            {planConfig.restrictedFeatures.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold text-slate-400 uppercase">Plan Limits / Upgrade Required:</p>
+                {planConfig.restrictedFeatures.map((feat, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-slate-400">
+                    <Lock size={14} className="text-amber-400 shrink-0" />
+                    <span>{feat}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -113,10 +166,14 @@ const UserProfileView = ({ userData, currentUser, onBack }) => {
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userData, setUserData] = useState(null);
+  const [userCoachings, setUserCoachings] = useState([]);
   const [loading, setLoading] = useState(true);
   
   // Landing / Auth View Toggle State
   const [showAuthScreen, setShowAuthScreen] = useState(false);
+
+  // Upgrade Plan Modal State
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // Notifications & Header Menus State
   const [showUserChat, setShowUserChat] = useState(false);
@@ -169,6 +226,11 @@ export default function App() {
               setUserData({ uid: docSnap.id, ...docSnap.data() });
             }
           });
+
+          // Fetch User Coachings List
+          const coachingRef = collection(db, 'coachings');
+          const coachingSnap = await getDocs(query(coachingRef, where('teacherId', '==', user.uid)));
+          setUserCoachings(coachingSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
           // 1. Unread Admin Messages Listener
           const chatId = [user.uid, ADMIN_ACCOUNT.uid].sort().join('_');
@@ -304,6 +366,7 @@ export default function App() {
 
   // Total Unclicked Notification Count
   const totalNotifCount = (unreadMsgCount > 0 ? 1 : 0) + unreadPayments.length;
+  const planConfig = getUserPlanConfig(userData);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased">
@@ -347,7 +410,11 @@ export default function App() {
                     <button
                       onClick={() => {
                         setShowNotifDropdown(false);
-                        setShowUserChat(true);
+                        if (planConfig.allowDirectChat) {
+                          setShowUserChat(true);
+                        } else {
+                          setShowUpgradeModal(true);
+                        }
                       }}
                       className="w-full text-left px-4 py-3 hover:bg-indigo-50/60 flex items-center justify-between border-b border-slate-50 transition-colors"
                     >
@@ -408,16 +475,27 @@ export default function App() {
                     <span className="truncate">{userData?.name || currentUser.email}</span>
                   </button>
 
-                  {/* 2. Message Admin Button */}
+                  {/* 2. Message Admin Button (Gated) */}
                   <button
                     onClick={() => {
                       setShowMenuDropdown(false);
-                      setShowUserChat(true);
+                      if (planConfig.allowDirectChat) {
+                        setShowUserChat(true);
+                      } else {
+                        setShowUpgradeModal(true);
+                      }
                     }}
-                    className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-indigo-600 font-bold text-xs flex items-center gap-2.5 transition-colors"
+                    className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-indigo-600 font-bold text-xs flex items-center justify-between transition-colors"
                   >
-                    <MessageSquare size={15} />
-                    <span>Message Admin</span>
+                    <div className="flex items-center gap-2.5">
+                      <MessageSquare size={15} />
+                      <span>Message Admin</span>
+                    </div>
+                    {!planConfig.allowDirectChat && (
+                      <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-md text-[9px] font-black uppercase">
+                        PRO
+                      </span>
+                    )}
                   </button>
 
                   {/* 3. Payments Portal Button */}
@@ -524,6 +602,8 @@ export default function App() {
         {currentNav.screen === 'dashboard' && (
           <TeacherDashboard 
             userId={currentUser.uid} 
+            userData={userData}
+            onOpenUpgradeModal={() => setShowUpgradeModal(true)}
             onSelectCoaching={(coaching) => {
               navigateTo('coaching', { 
                 coaching, 
@@ -537,8 +617,10 @@ export default function App() {
         {currentNav.screen === 'coaching' && selectedCoaching && (
           <CoachingView 
             coaching={selectedCoaching} 
+            userData={userData}
             initialState={currentNav.state}
             onUpdateState={updateCurrentState}
+            onOpenUpgradeModal={() => setShowUpgradeModal(true)}
             onOpenAddStudent={() => navigateTo('addStudent', { coaching: selectedCoaching })}
             onOpenClassDetails={(classId) => navigateTo('classDetails', { coaching: selectedCoaching, classId })}
             onOpenSubjectDetails={({ classId, subjectId }) => navigateTo('subjectDetails', { coaching: selectedCoaching, classId, subjectId })}
@@ -568,7 +650,9 @@ export default function App() {
         {currentNav.screen === 'addStudent' && selectedCoaching && (
           <AddStudentPage 
             coachingId={selectedCoaching.id}
+            userData={userData}
             classes={selectedCoaching.classes || []}
+            onOpenUpgradeModal={() => setShowUpgradeModal(true)}
             onComplete={goBack}
             onCancel={goBack}
             onGoBack={goBack}
@@ -577,6 +661,8 @@ export default function App() {
         {currentNav.screen === 'studentDetails' && selectedStudent && (
           <StudentDetailsPage 
             studentId={selectedStudent.id} 
+            userData={userData}
+            onOpenUpgradeModal={() => setShowUpgradeModal(true)}
             onBack={goBack} 
           />
         )}
@@ -592,6 +678,7 @@ export default function App() {
             userData={userData}
             currentUser={currentUser}
             onBack={goBack}
+            onOpenUpgradeModal={() => setShowUpgradeModal(true)}
           />
         )}
       </main>
@@ -608,6 +695,15 @@ export default function App() {
           onClose={() => setShowUserChat(false)}
         />
       )}
+
+      {/* Plan Upgrade Modal */}
+      <UpgradePlanModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        currentUser={currentUser}
+        userData={userData}
+        userCoachings={userCoachings}
+      />
     </div>
   );
 }
