@@ -17,7 +17,7 @@ import { ChatModal } from './components/ChatModal';
 import { 
   LogOut, BookOpen, User, ChevronRight, 
   Home, ArrowLeft, MessageSquare, ShieldAlert, 
-  Bell, CreditCard 
+  Bell, CreditCard, MoreVertical, Shield, Calendar, Mail
 } from 'lucide-react';
 
 const ADMIN_EMAIL = 'saurabh@gmail.com';
@@ -25,6 +25,89 @@ const ADMIN_ACCOUNT = {
   uid: 'ADMIN_SUPER_USER_ID',
   email: ADMIN_EMAIL,
   name: 'System Admin'
+};
+
+// Internal Page Component: User Profile Details View
+const UserProfileView = ({ userData, currentUser, onBack }) => {
+  const createdDate = userData?.createdAt 
+    ? new Date(userData.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    : 'N/A';
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-xs"
+        >
+          <ArrowLeft size={16} /> Back to Dashboard
+        </button>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-slate-200/70 p-6 sm:p-8 shadow-xs space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-6">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white font-extrabold text-2xl flex items-center justify-center shadow-md shadow-indigo-100 shrink-0">
+              {(userData?.name || currentUser?.email || 'U').charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                  {userData?.name || 'User Profile'}
+                </h1>
+                <span className={`px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
+                  userData?.status === 'stopped' 
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : userData?.status === 'deleted'
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                }`}>
+                  {userData?.status || 'Active'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mt-1">{currentUser?.email}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Profile Attributes Card Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <User size={13} className="text-indigo-600" /> Full Name
+            </p>
+            <p className="text-sm font-extrabold text-slate-800">{userData?.name || 'N/A'}</p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Mail size={13} className="text-indigo-600" /> Email Address
+            </p>
+            <p className="text-sm font-extrabold text-slate-800">{currentUser?.email || 'N/A'}</p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Shield size={13} className="text-indigo-600" /> Account Role
+            </p>
+            <p className="text-sm font-extrabold text-indigo-700 capitalize">{userData?.role || 'Teacher / Educator'}</p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Calendar size={13} className="text-indigo-600" /> Joined / Registered Date
+            </p>
+            <p className="text-sm font-extrabold text-slate-800">{createdDate}</p>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 text-xs text-indigo-900 space-y-1">
+          <p className="font-bold">Account User ID:</p>
+          <p className="font-mono text-[11px] text-indigo-700 select-all">{currentUser?.uid}</p>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default function App() {
@@ -35,12 +118,15 @@ export default function App() {
   // Landing / Auth View Toggle State
   const [showAuthScreen, setShowAuthScreen] = useState(false);
 
-  // Notifications State
+  // Notifications & Header Menus State
   const [showUserChat, setShowUserChat] = useState(false);
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
   const [unreadPayments, setUnreadPayments] = useState([]);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const [showMenuDropdown, setShowMenuDropdown] = useState(false);
+  
   const notifRef = useRef(null);
+  const menuRef = useRef(null);
 
   // Router history
   const [navigationHistory, setNavigationHistory] = useState([
@@ -48,18 +134,21 @@ export default function App() {
   ]);
   const currentNav = navigationHistory[navigationHistory.length - 1] || { screen: 'dashboard', state: {} };
 
-  // Click Outside Notification Listener
+  // Click Outside Listener for Notifications and Three-Dots Menu Dropdown
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (notifRef.current && !notifRef.current.contains(e.target)) {
         setShowNotifDropdown(false);
       }
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowMenuDropdown(false);
+      }
     };
-    if (showNotifDropdown) {
+    if (showNotifDropdown || showMenuDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showNotifDropdown]);
+  }, [showNotifDropdown, showMenuDropdown]);
 
   useEffect(() => {
     let unsubProfile = () => {};
@@ -122,7 +211,7 @@ export default function App() {
     signOut(auth);
     setNavigationHistory([{ screen: 'dashboard', state: {} }]);
     setShowUserChat(false);
-    // Explicitly navigate to the Login / Auth page on logout
+    setShowMenuDropdown(false);
     setShowAuthScreen(true);
   };
 
@@ -232,11 +321,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3 sm:gap-4">
-            <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
-              <User size={14} />
-              <span className="font-medium">{userData?.name || currentUser.email}</span>
-            </div>
-
             {/* Notification Bell Dropdown */}
             <div className="relative" ref={notifRef}>
               <button
@@ -300,25 +384,56 @@ export default function App() {
               )}
             </div>
 
-            {/* Payments Button Top Right */}
-            <button
-              onClick={() => navigateTo('payments')}
-              className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border border-emerald-200"
-              title="Payments Portal"
-            >
-              <CreditCard size={14} />
-              <span className="hidden sm:inline">Payments</span>
-            </button>
+            {/* Three-Dots Dropdown Menu */}
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setShowMenuDropdown(!showMenuDropdown)}
+                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors text-slate-600"
+                title="More options"
+              >
+                <MoreVertical size={16} />
+              </button>
 
-            {/* Message Admin Button */}
-            <button
-              onClick={() => setShowUserChat(true)}
-              className="relative px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border border-indigo-100"
-              title="Message Admin"
-            >
-              <MessageSquare size={14} />
-              <span className="hidden sm:inline">Message Admin</span>
-            </button>
+              {showMenuDropdown && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 py-1.5 z-50 text-slate-800 divide-y divide-slate-100">
+                  {/* 1. First Item: Profile Button */}
+                  <button
+                    onClick={() => {
+                      setShowMenuDropdown(false);
+                      navigateTo('profile');
+                    }}
+                    className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-slate-800 font-bold text-xs flex items-center gap-2.5 transition-colors"
+                  >
+                    <User size={15} className="text-indigo-600 shrink-0" />
+                    <span className="truncate">{userData?.name || currentUser.email}</span>
+                  </button>
+
+                  {/* 2. Message Admin Button */}
+                  <button
+                    onClick={() => {
+                      setShowMenuDropdown(false);
+                      setShowUserChat(true);
+                    }}
+                    className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-indigo-600 font-bold text-xs flex items-center gap-2.5 transition-colors"
+                  >
+                    <MessageSquare size={15} />
+                    <span>Message Admin</span>
+                  </button>
+
+                  {/* 3. Payments Portal Button */}
+                  <button
+                    onClick={() => {
+                      setShowMenuDropdown(false);
+                      navigateTo('payments');
+                    }}
+                    className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 text-emerald-700 font-bold text-xs flex items-center gap-2.5 transition-colors"
+                  >
+                    <CreditCard size={15} />
+                    <span>Payments Portal</span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             <button 
               onClick={handleLogout}
@@ -395,6 +510,12 @@ export default function App() {
                 <span className="text-indigo-600 font-bold">Payments</span>
               </>
             )}
+            {currentNav.screen === 'profile' && (
+              <>
+                <ChevronRight size={12} className="text-slate-300" />
+                <span className="text-indigo-600 font-bold">My Profile</span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -463,6 +584,13 @@ export default function App() {
           <UserPaymentsPage
             currentUser={currentUser}
             userData={userData}
+            onBack={goBack}
+          />
+        )}
+        {currentNav.screen === 'profile' && (
+          <UserProfileView
+            userData={userData}
+            currentUser={currentUser}
             onBack={goBack}
           />
         )}
