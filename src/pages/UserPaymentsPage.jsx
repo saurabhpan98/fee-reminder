@@ -7,7 +7,7 @@ import {
 } from 'firebase/firestore';
 import { 
   Plus, CreditCard, Clock, CheckCircle, XCircle, 
-  ArrowLeft, Edit3, X, MessageSquare, History, Filter, Building2, Check 
+  ArrowLeft, Edit3, X, MessageSquare, History, Filter, Building2, Check, Sparkles, User
 } from 'lucide-react';
 
 export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
@@ -17,7 +17,6 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPayment, setEditingPayment] = useState(null);
-
   const [formData, setFormData] = useState({
     coachingId: '',
     month: new Date().getMonth() + 1,
@@ -30,7 +29,6 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
   // Fetch all coachings owned/registered by this user
   useEffect(() => {
     if (!currentUser?.uid) return;
-
     const fetchUserCoachings = async () => {
       const combinedDocs = new Map();
       const coachingRef = collection(db, 'coachings');
@@ -54,24 +52,20 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
       }
       const coachingList = Array.from(combinedDocs.values());
       setCoachings(coachingList);
-
       if (coachingList.length === 1) {
         setFormData(prev => ({ ...prev, coachingId: coachingList[0].id }));
       }
     };
-
     fetchUserCoachings();
   }, [currentUser.uid, currentUser.email]);
 
   // Real-time Payments Listener
   useEffect(() => {
     if (!currentUser?.uid) return;
-
     const q = query(
       collection(db, 'payments'),
       where('userId', '==', currentUser.uid)
     );
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(d => {
         const data = d.data();
@@ -79,15 +73,12 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
         if (data.userRead === false) {
           updateDoc(doc(db, 'payments', d.id), { userRead: true }).catch(console.error);
         }
-
         return { id: d.id, ...data };
       });
-
       list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setPayments(list);
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, [currentUser.uid]);
 
@@ -178,7 +169,6 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
           createdAt: nowISO
         });
       }
-
       setShowAddModal(false);
       setEditingPayment(null);
     } catch (err) {
@@ -187,8 +177,9 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
     }
   };
 
-  // Filter Payments based on Coaching selection if user has multiple coachings
+  // Filter Payments based on Coaching selection if user has multiple coachings (Plan upgrade requests always show)
   const filteredPayments = payments.filter(p => {
+    if (p.isPlanUpgradeRequest) return true;
     if (coachings.length <= 1 || selectedCoachingFilter === 'all') return true;
     return p.coachingId === selectedCoachingFilter;
   });
@@ -207,7 +198,6 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
         >
           <ArrowLeft size={16} /> Back to Dashboard
         </button>
-
         <button
           onClick={handleOpenAdd}
           className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-100 flex items-center gap-1.5 transition-all"
@@ -263,7 +253,6 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                   {activeProcessingPayments.map((p) => {
                     const isPending = p.status === 'pending';
                     const isRejected = p.status === 'rejected';
-
                     const monthName = new Date(0, p.month - 1).toLocaleString('default', { month: 'long' });
                     const adminHistory = p.adminRemarksHistory || [];
 
@@ -282,10 +271,19 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                               <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-70">
                                 {monthName} {p.year}
                               </span>
-                              <h3 className="text-xl font-black mt-0.5">₹{p.amount}</h3>
-                              <p className="text-[11px] font-extrabold text-indigo-700 flex items-center gap-1 mt-1">
-                                <Building2 size={12} /> {p.coachingName || 'Tuition Center'}
-                              </p>
+                              <h3 className="text-xl font-black mt-0.5">₹ {p.amount}</h3>
+
+                              {/* Show Plan Upgrade Badge if plan upgrade request, else show Coaching Name */}
+                              {p.isPlanUpgradeRequest ? (
+                                <p className="text-[11px] font-extrabold text-indigo-700 flex items-center gap-1.5 mt-1 bg-indigo-100/80 px-2.5 py-1 rounded-lg w-fit">
+                                  <Sparkles size={13} className="text-indigo-600 shrink-0" />
+                                  <span>User Account Plan Upgrade</span>
+                                </p>
+                              ) : (
+                                <p className="text-[11px] font-extrabold text-indigo-700 flex items-center gap-1 mt-1">
+                                  <Building2 size={12} /> {p.coachingName || 'Tuition Center'}
+                                </p>
+                              )}
                             </div>
 
                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold flex items-center gap-1 border uppercase ${
@@ -333,7 +331,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                           ) : null}
                         </div>
 
-                        {isRejected && (
+                        {isRejected && !p.isPlanUpgradeRequest && (
                           <div className="pt-2 border-t border-rose-200 flex justify-end">
                             <button
                               onClick={() => handleOpenEdit(p)}
@@ -360,7 +358,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
                     <tr>
-                      <th className="px-4 py-3 font-bold">Coaching Name</th>
+                      <th className="px-4 py-3 font-bold">Type / Coaching</th>
                       <th className="px-4 py-3 font-bold">Month/Year</th>
                       <th className="px-4 py-3 font-bold">Amount</th>
                       <th className="px-4 py-3 font-bold">Date of Payment</th>
@@ -373,22 +371,27 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                   <tbody className="divide-y divide-slate-100 text-xs font-medium">
                     {acceptedPayments.map(p => {
                       const submissionDate = p.createdAt 
-                        ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                        ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
                         : '-';
-
                       const acceptanceDate = p.updatedAt 
-                        ? new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                        ? new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
                         : '-';
 
                       return (
                         <tr key={p.id}>
                           <td className="px-4 py-3 font-extrabold text-indigo-700">
-                            {p.coachingName || 'Tuition Center'}
+                            {p.isPlanUpgradeRequest ? (
+                              <span className="flex items-center gap-1 text-indigo-700">
+                                <Sparkles size={13} className="text-amber-500" /> User Plan Upgrade
+                              </span>
+                            ) : (
+                              p.coachingName || 'Tuition Center'
+                            )}
                           </td>
                           <td className="px-4 py-3 font-bold text-slate-800">
                             {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
                           </td>
-                          <td className="px-4 py-3 font-black text-slate-900">₹{p.amount}</td>
+                          <td className="px-4 py-3 font-black text-slate-900">₹ {p.amount}</td>
                           <td className="px-4 py-3 font-bold text-slate-700">
                             {submissionDate}
                           </td>
@@ -407,7 +410,6 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                     })}
                   </tbody>
                 </table>
-
                 {acceptedPayments.length === 0 && (
                   <div className="p-6 text-center text-slate-400 text-xs font-medium bg-slate-50/50 rounded-2xl border border-slate-100/80">
                     No approved payments found.

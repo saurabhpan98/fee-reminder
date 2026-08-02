@@ -5,7 +5,7 @@ import { collection, addDoc } from 'firebase/firestore';
 import { X, Sparkles, CheckCircle, ShieldCheck, CreditCard } from 'lucide-react';
 import { PLAN_CONFIG, PLANS } from '../../utils/planUtils';
 
-export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData, userCoachings = [] }) => {
+export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData }) => {
   const [loading, setLoading] = useState(false);
   const [paymentDetails, setPaymentDetails] = useState('');
   const [userRemarks, setUserRemarks] = useState('');
@@ -13,7 +13,6 @@ export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData, userC
 
   if (!isOpen) return null;
 
-  const currentPlanId = userData?.plan || PLANS.STARTER;
   const proPlan = PLAN_CONFIG[PLANS.PRO];
 
   const handleUpgradeSubmit = async (e) => {
@@ -26,19 +25,18 @@ export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData, userC
     setLoading(true);
     try {
       const nowISO = new Date().toISOString();
-      const firstCoaching = userCoachings[0];
 
-      // Submit an upgrade request as a payment verification request for Admin
+      // Submit an upgrade request attached directly to the USER (not to any specific coaching)
       await addDoc(collection(db, 'payments'), {
         userId: currentUser.uid,
         userName: userData?.name || currentUser.email,
         userEmail: currentUser.email,
-        coachingId: firstCoaching?.id || 'GENERAL',
-        coachingName: firstCoaching?.name || firstCoaching?.coachingName || 'System Plan Upgrade',
+        coachingId: null, // User-level request
+        coachingName: 'User Account Plan Upgrade',
         month: new Date().getMonth() + 1,
         year: new Date().getFullYear(),
         amount: proPlan.price,
-        paymentDetails: `[PLAN UPGRADE TO PRO ACADEMY] ${paymentDetails}`,
+        paymentDetails: paymentDetails,
         userRemarks: userRemarks || 'Requested Pro Academy plan upgrade.',
         isPlanUpgradeRequest: true,
         targetPlan: PLANS.PRO,
@@ -78,7 +76,7 @@ export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData, userC
           </div>
           <div>
             <h3 className="font-extrabold text-slate-900 text-lg">Upgrade to Pro Academy</h3>
-            <p className="text-xs text-slate-500 font-medium">Unlock full power for your coaching center</p>
+            <p className="text-xs text-slate-500 font-medium">Upgrade your personal user account</p>
           </div>
         </div>
 
@@ -87,7 +85,7 @@ export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData, userC
             <CheckCircle size={36} className="mx-auto text-emerald-600" />
             <h4 className="font-extrabold text-emerald-900 text-sm">Upgrade Request Submitted!</h4>
             <p className="text-xs text-emerald-700 leading-relaxed">
-              Your payment verification request for <strong>Pro Academy</strong> has been sent to the admin. Your plan will activate as soon as the admin accepts the payment.
+              Your user account upgrade request for <strong>Pro Academy</strong> has been sent to the admin. Your plan will activate as soon as the admin approves the request.
             </p>
           </div>
         ) : (
@@ -95,7 +93,7 @@ export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData, userC
             {/* Feature Highlights */}
             <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-3 shadow-inner">
               <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                <span className="text-xs font-bold text-indigo-400 uppercase">Pro Academy Features</span>
+                <span className="text-xs font-bold text-indigo-400 uppercase">Pro Academy Plan Features</span>
                 <span className="text-sm font-black text-emerald-400">{proPlan.priceLabel}</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-[11px] font-medium text-slate-300">
@@ -130,7 +128,7 @@ export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData, userC
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Please activate Pro Plan for my physics center"
+                  placeholder="e.g. Please activate Pro Plan for my user account"
                   value={userRemarks}
                   onChange={(e) => setUserRemarks(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
