@@ -21,6 +21,9 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
   const [cancellingPayment, setCancellingPayment] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Inline Validation Error State for Form
+  const [formError, setFormError] = useState('');
+
   const currentPlan = getUserPlanConfig(userData);
 
   const [formData, setFormData] = useState({
@@ -31,15 +34,6 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
     paymentDetails: '',
     userRemarks: ''
   });
-
-  const handlePaymentTypeChange = (type) => {
-    const targetAmount = type === 'upgrade' ? PLAN_CONFIG[PLANS.PRO].price : currentPlan.price;
-    setFormData(prev => ({
-      ...prev,
-      paymentType: type,
-      amount: targetAmount
-    }));
-  };
 
   // Real-time Payments Listener
   useEffect(() => {
@@ -63,8 +57,24 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
     return () => unsubscribe();
   }, [currentUser.uid]);
 
+  // Check if user already has an active (pending OR rejected) request for plan upgrade
+  const hasExistingUpgradeRequest = payments.some(
+    p => p.isPlanUpgradeRequest && (p.status === 'pending' || p.status === 'rejected')
+  );
+
+  const handlePaymentTypeChange = (type) => {
+    setFormError('');
+    const targetAmount = type === 'upgrade' ? PLAN_CONFIG[PLANS.PRO].price : currentPlan.price;
+    setFormData(prev => ({
+      ...prev,
+      paymentType: type,
+      amount: targetAmount
+    }));
+  };
+
   const handleOpenAdd = () => {
     setEditingPayment(null);
+    setFormError('');
     setFormData({
       paymentType: 'monthly',
       month: new Date().getMonth() + 1,
@@ -78,6 +88,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
 
   const handleOpenEdit = (payment) => {
     setEditingPayment(payment);
+    setFormError('');
     const isUpgrade = payment.isPlanUpgradeRequest;
     setFormData({
       paymentType: isUpgrade ? 'upgrade' : 'monthly',
@@ -92,12 +103,21 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.amount || Number(formData.amount) < 0) {
-      alert("Please enter a valid payment amount.");
+    setFormError('');
+
+    const isUpgrade = formData.paymentType === 'upgrade';
+
+    // Check upon form submission
+    if (isUpgrade && !editingPayment && hasExistingUpgradeRequest) {
+      setFormError('already submitted.');
       return;
     }
 
-    const isUpgrade = formData.paymentType === 'upgrade';
+    if (!formData.amount || Number(formData.amount) < 0) {
+      setFormError('Please enter a valid payment amount.');
+      return;
+    }
+
     const planName = isUpgrade ? PLAN_CONFIG[PLANS.PRO].name : currentPlan.name;
 
     try {
@@ -157,7 +177,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
       setEditingPayment(null);
     } catch (err) {
       console.error("Error saving payment:", err);
-      alert("Failed to submit payment: " + err.message);
+      setFormError("Failed to submit payment: " + err.message);
     }
   };
 
@@ -462,6 +482,14 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
             </div>
 
+            {/* Dynamic Error Message on Submit Attempt */}
+            {formError && (
+              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in duration-200">
+                <AlertTriangle size={18} className="shrink-0 text-amber-600" />
+                <span>{formError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Payment Type</label>
@@ -545,7 +573,10 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                   type="text"
                   placeholder="e.g. Paid via UPI Txn ID: 9876XXXX"
                   value={formData.paymentDetails}
-                  onChange={(e) => setFormData({ ...formData, paymentDetails: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, paymentDetails: e.target.value });
+                    if (formError) setFormError('');
+                  }}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
@@ -556,7 +587,10 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                   rows="2"
                   placeholder="Add any extra notes..."
                   value={formData.userRemarks}
-                  onChange={(e) => setFormData({ ...formData, userRemarks: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, userRemarks: e.target.value });
+                    if (formError) setFormError('');
+                  }}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
