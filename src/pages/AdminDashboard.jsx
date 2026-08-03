@@ -2,15 +2,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { 
-  collection, onSnapshot, getDocs, doc, updateDoc, 
-  deleteDoc, query, where 
-} from 'firebase/firestore';
+   collection, onSnapshot, getDocs, doc, updateDoc, 
+   deleteDoc, query, where 
+ } from 'firebase/firestore';
 import { ChatModal } from '../components/ChatModal';
 import { AdminPaymentRequestsPage } from './AdminPaymentRequestsPage';
 import { PLAN_CONFIG, PLANS } from '../utils/planUtils';
 import { 
-  Users, Bell, LogOut, MessageSquare, PauseCircle, 
-  PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, CreditCard, Calendar, ArrowUpDown, Sparkles, Shield
+   Users, Bell, LogOut, MessageSquare, PauseCircle, 
+   PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, CreditCard, Calendar, ArrowUpDown, Sparkles, Shield, CheckCircle2, AlertCircle, X
 } from 'lucide-react';
 
 export const AdminDashboard = ({ adminUser, onLogout }) => {
@@ -36,6 +36,18 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   // Delete User Modal State
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Green Toast Notification State
+  const [toastInfo, setToastInfo] = useState(null);
+
+  useEffect(() => {
+    if (toastInfo) {
+      const timer = setTimeout(() => {
+        setToastInfo(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastInfo]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -99,6 +111,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     const unsubChats = onSnapshot(collection(db, 'chats'), async () => {
       const allUsersSnap = await getDocs(collection(db, 'users'));
       const unreadList = [];
+
       for (const uDoc of allUsersSnap.docs) {
         if (uDoc.data().email === 'saurabh@gmail.com') continue;
         const chatId = [adminUser.uid, uDoc.id].sort().join('_');
@@ -172,10 +185,16 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
         }
       });
       setSelectedUser(prev => ({ ...prev, plan: newPlanId }));
-      alert(`User plan successfully updated to ${planConfig?.name}`);
+      setToastInfo({
+        message: `User plan successfully updated to ${planConfig?.name || 'Selected Plan'}.`,
+        isError: false
+      });
     } catch (err) {
       console.error("Error changing user plan:", err);
-      alert("Failed to update user plan: " + err.message);
+      setToastInfo({
+        message: `Failed to update user plan: ${err.message}`,
+        isError: true
+      });
     }
   };
 
@@ -191,10 +210,12 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
       for (const sDoc of studentSnap.docs) {
         await deleteDoc(doc(db, 'students', sDoc.id));
       }
+
       await updateDoc(doc(db, 'users', selectedUser.uid), {
         status: 'deleted',
         isLoginDisabled: true
       });
+
       setShowDeleteUserModal(false);
       setSelectedUser(null);
     } catch (err) {
@@ -262,6 +283,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                 </span>
               )}
             </button>
+
             <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setShowNotificationDropdown(!showNotificationDropdown)}
@@ -274,6 +296,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   </span>
                 )}
               </button>
+
               {showNotificationDropdown && (
                 <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 text-slate-800">
                   <div className="px-4 py-2 border-b border-slate-100 font-extrabold text-xs text-slate-500">
@@ -298,6 +321,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                 </div>
               )}
             </div>
+
             <button
               onClick={onLogout}
               className="flex items-center gap-2 px-3.5 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white rounded-xl text-xs font-bold transition-all"
@@ -382,6 +406,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   })}
                 </tbody>
               </table>
+
               {sortedUsers.length === 0 && (
                 <div className="p-8 text-center text-slate-400 text-xs font-medium">
                   No users found matching the selected filter.
@@ -422,6 +447,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   >
                     <MessageSquare size={14} /> Open Direct Chat
                   </button>
+
                   {selectedUser.status !== 'deleted' && (
                     <button
                       onClick={handleToggleUserStatus}
@@ -435,6 +461,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                       {selectedUser.status === 'stopped' ? 'Resume User Activity' : 'Pause User Activity'}
                     </button>
                   )}
+
                   {selectedUser.status !== 'deleted' && (
                     <button
                       onClick={() => setShowDeleteUserModal(true)}
@@ -489,9 +516,8 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                     <tbody className="divide-y divide-slate-100 text-xs font-medium">
                       {userCoachings.map(c => {
                         const createdDate = c.createdAt 
-                          ? new Date(c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
+                          ? new Date(c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
                           : 'N/A';
-
                         return (
                           <tr key={c.id}>
                             <td className="px-4 py-3 font-bold text-slate-800">{c.name || c.coachingName || 'N/A'}</td>
@@ -506,6 +532,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                       })}
                     </tbody>
                   </table>
+
                   {userCoachings.length === 0 && (
                     <div className="p-6 text-center text-slate-400 text-xs font-medium">
                       No coachings found for this user.
@@ -552,13 +579,12 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                     <tbody className="divide-y divide-slate-100 text-xs font-medium">
                       {sortedUserPayments.map(p => {
                         const submissionDate = p.createdAt 
-                          ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
+                          ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
                           : '-';
                         const isAccepted = p.status === 'accepted';
                         const acceptanceDate = isAccepted && p.updatedAt 
-                          ? new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
+                          ? new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
                           : '-';
-
                         return (
                           <tr key={p.id}>
                             <td className="px-4 py-3 font-extrabold text-indigo-700">
@@ -575,7 +601,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                             <td className="px-4 py-3 font-bold text-slate-800">
                               {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
                             </td>
-                            <td className="px-4 py-3 font-black text-slate-900">₹ {p.amount}</td>
+                            <td className="px-4 py-3 font-black text-slate-900">₹{p.amount}</td>
                             <td className="px-4 py-3 font-bold text-slate-700">
                               {submissionDate}
                             </td>
@@ -598,6 +624,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                       })}
                     </tbody>
                   </table>
+
                   {sortedUserPayments.length === 0 && (
                     <div className="p-6 text-center text-slate-400 text-xs font-medium">
                       No payment submissions found.
@@ -628,6 +655,28 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                 {isProcessing ? 'Purging Data...' : 'Yes, Delete Account'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Green Toast Notification at Bottom Right */}
+      {toastInfo && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
+          <div className={`px-4 py-3 rounded-2xl shadow-xl border flex items-center gap-3 max-w-sm text-xs font-bold ${
+            toastInfo.isError
+              ? 'bg-rose-600 text-white border-rose-700'
+              : 'bg-emerald-600 text-white border-emerald-700'
+          }`}>
+            <div className="p-1.5 bg-white/20 rounded-xl shrink-0">
+              {toastInfo.isError ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+            </div>
+            <p className="flex-1 leading-snug">{toastInfo.message}</p>
+            <button
+              onClick={() => setToastInfo(null)}
+              className="p-1 hover:bg-white/20 rounded-lg transition-colors shrink-0"
+            >
+              <X size={16} />
+            </button>
           </div>
         </div>
       )}
