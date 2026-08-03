@@ -10,7 +10,7 @@ import { AdminPaymentRequestsPage } from './AdminPaymentRequestsPage';
 import { PLAN_CONFIG, PLANS } from '../utils/planUtils';
 import { 
   Users, Bell, LogOut, MessageSquare, PauseCircle, 
-  PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, CreditCard, Calendar, ArrowUpDown, Sparkles
+  PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, CreditCard, Calendar, ArrowUpDown, Sparkles, Shield
 } from 'lucide-react';
 
 export const AdminDashboard = ({ adminUser, onLogout }) => {
@@ -19,7 +19,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [userCoachings, setUserCoachings] = useState([]);
   const [userPayments, setUserPayments] = useState([]);
-  const [adminCoachingFilter, setAdminCoachingFilter] = useState('all');
   const [paymentSortOrder, setPaymentSortOrder] = useState('latest'); // 'latest' | 'oldest'
   const [viewingRequests, setViewingRequests] = useState(false);
 
@@ -141,7 +140,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   const handleOpenUserProfile = async (user) => {
     setSelectedUser(user);
     setViewingRequests(false);
-    setAdminCoachingFilter('all');
     setPaymentSortOrder('latest');
     
     const coachings = await fetchCoachingsForUser(user);
@@ -165,11 +163,16 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   const handleAdminChangePlan = async (newPlanId) => {
     if (!selectedUser) return;
     try {
+      const planConfig = PLAN_CONFIG[newPlanId];
       await updateDoc(doc(db, 'users', selectedUser.uid), {
-        plan: newPlanId
+        plan: newPlanId,
+        planNotification: {
+          show: true,
+          planName: planConfig?.name || 'Starter Teacher'
+        }
       });
       setSelectedUser(prev => ({ ...prev, plan: newPlanId }));
-      alert(`User plan successfully updated to ${PLAN_CONFIG[newPlanId]?.name}`);
+      alert(`User plan successfully updated to ${planConfig?.name}`);
     } catch (err) {
       console.error("Error changing user plan:", err);
       alert("Failed to update user plan: " + err.message);
@@ -220,14 +223,8 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     return getStatusWeight(a.status) - getStatusWeight(b.status);
   });
 
-  // Filter payments for selected user based on coaching selection
-  const filteredUserPayments = userPayments.filter(p => {
-    if (userCoachings.length <= 1 || adminCoachingFilter === 'all') return true;
-    return p.coachingId === adminCoachingFilter;
-  });
-
   // Sort payments according to Billing Month/Year
-  const sortedUserPayments = [...filteredUserPayments].sort((a, b) => {
+  const sortedUserPayments = [...userPayments].sort((a, b) => {
     const periodValueA = (Number(a.year) || 0) * 12 + (Number(a.month) || 0);
     const periodValueB = (Number(b.year) || 0) * 12 + (Number(b.month) || 0);
     return paymentSortOrder === 'latest' ? periodValueB - periodValueA : periodValueA - periodValueB;
@@ -517,47 +514,24 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                 </div>
               </div>
 
-              {/* User Payment Submissions History */}
+              {/* User Subscription Payment Submissions History */}
               <div className="space-y-3 pt-4 border-t border-slate-100">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-                    <CreditCard size={16} className="text-indigo-600" /> User Payment Submissions ({userPayments.length})
+                    <CreditCard size={16} className="text-indigo-600" /> Account Payment Submissions ({userPayments.length})
                   </h3>
                   
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* Month-Year Sort Controller */}
-                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
-                      <ArrowUpDown size={13} className="text-slate-400" />
-                      <label className="font-bold text-slate-500">Sort Month/Year:</label>
-                      <select
-                        value={paymentSortOrder}
-                        onChange={(e) => setPaymentSortOrder(e.target.value)}
-                        className="bg-transparent border-none font-bold text-slate-800 outline-none cursor-pointer"
-                      >
-                        <option value="latest">Latest Month/Year First</option>
-                        <option value="oldest">Oldest Month/Year First</option>
-                      </select>
-                    </div>
-
-                    {/* Coaching Filter */}
-                    {userCoachings.length > 1 && (
-                      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
-                        <Filter size={13} className="text-slate-400" />
-                        <label className="font-bold text-slate-500">Filter Coaching:</label>
-                        <select
-                          value={adminCoachingFilter}
-                          onChange={(e) => setAdminCoachingFilter(e.target.value)}
-                          className="bg-transparent border-none font-bold text-slate-800 outline-none cursor-pointer"
-                        >
-                          <option value="all">All Coachings ({userCoachings.length})</option>
-                          {userCoachings.map(c => (
-                            <option key={c.id} value={c.id}>
-                              {c.name || c.coachingName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
+                  <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
+                    <ArrowUpDown size={13} className="text-slate-400" />
+                    <label className="font-bold text-slate-500">Sort Month/Year:</label>
+                    <select
+                      value={paymentSortOrder}
+                      onChange={(e) => setPaymentSortOrder(e.target.value)}
+                      className="bg-transparent border-none font-bold text-slate-800 outline-none cursor-pointer"
+                    >
+                      <option value="latest">Latest Month/Year First</option>
+                      <option value="oldest">Oldest Month/Year First</option>
+                    </select>
                   </div>
                 </div>
 
@@ -565,7 +539,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   <table className="w-full text-left text-sm whitespace-nowrap">
                     <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
                       <tr>
-                        <th className="px-4 py-3 font-bold">Coaching Name</th>
+                        <th className="px-4 py-3 font-bold">Type of Payment</th>
                         <th className="px-4 py-3 font-bold">Month/Year</th>
                         <th className="px-4 py-3 font-bold">Amount</th>
                         <th className="px-4 py-3 font-bold">Date of Payment</th>
@@ -588,7 +562,15 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                         return (
                           <tr key={p.id}>
                             <td className="px-4 py-3 font-extrabold text-indigo-700">
-                              {p.coachingName || 'Tuition Center'}
+                              {p.isPlanUpgradeRequest ? (
+                                <span className="flex items-center gap-1.5 text-indigo-700">
+                                  <Sparkles size={13} className="text-amber-500" /> User Plan Upgrade
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1.5 text-slate-800 font-bold">
+                                  <Shield size={13} className="text-indigo-600" /> Monthly Subscription ({selectedUserPlanConfig.name})
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-3 font-bold text-slate-800">
                               {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
@@ -618,7 +600,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   </table>
                   {sortedUserPayments.length === 0 && (
                     <div className="p-6 text-center text-slate-400 text-xs font-medium">
-                      No payment submissions found matching the selected filter.
+                      No payment submissions found.
                     </div>
                   )}
                 </div>

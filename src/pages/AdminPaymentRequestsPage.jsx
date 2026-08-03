@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { ArrowLeft, Check, XCircle, CreditCard, MessageSquare, History, Building2, Sparkles, User } from 'lucide-react';
-import { PLANS } from '../utils/planUtils';
+import { ArrowLeft, Check, XCircle, CreditCard, MessageSquare, History, Building2, Sparkles } from 'lucide-react';
+import { PLANS, PLAN_CONFIG } from '../utils/planUtils';
 
 export const AdminPaymentRequestsPage = ({ onBack }) => {
   const [payments, setPayments] = useState([]);
@@ -55,11 +55,18 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
         updatedAt: nowISO
       });
 
-      // If this was a user account plan upgrade request and accepted, activate Pro Plan
+      // If this was a user account plan upgrade request and accepted, activate target plan and set notification
       if (isAccept && payment.isPlanUpgradeRequest && payment.userId) {
+        const targetPlanId = payment.targetPlan || PLANS.PRO;
+        const targetPlanConfig = PLAN_CONFIG[targetPlanId];
         const userRef = doc(db, 'users', payment.userId);
+        
         await updateDoc(userRef, {
-          plan: payment.targetPlan || PLANS.PRO
+          plan: targetPlanId,
+          planNotification: {
+            show: true,
+            planName: targetPlanConfig?.name || 'Pro Academy'
+          }
         });
       }
 

@@ -54,25 +54,16 @@ export const PLAN_CONFIG = {
   }
 };
 
-/**
- * Returns current user plan configuration object (defaults to Starter)
- */
 export const getUserPlanConfig = (userData) => {
   const planId = userData?.plan || PLANS.STARTER;
   return PLAN_CONFIG[planId] || PLAN_CONFIG[PLANS.STARTER];
 };
 
-/**
- * Validates if the user can create a new coaching center based on plan limits
- */
 export const canCreateCoaching = (userData, currentCoachingCount) => {
   const plan = getUserPlanConfig(userData);
   return currentCoachingCount < plan.maxCoachings;
 };
 
-/**
- * Validates if the user can add another student based on plan limits
- */
 export const canAddStudent = (userData, currentStudentCount) => {
   const plan = getUserPlanConfig(userData);
   return currentStudentCount < plan.maxStudents;

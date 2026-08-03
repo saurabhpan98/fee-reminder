@@ -84,18 +84,12 @@ const UserProfileView = ({ userData, currentUser, onBack, onOpenUpgradeModal }) 
               </h2>
             </div>
 
-            {planConfig.id === PLANS.STARTER ? (
-              <button
-                onClick={onOpenUpgradeModal}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-indigo-500/30 transition-all hover:scale-105"
-              >
-                Upgrade to Pro Academy
-              </button>
-            ) : (
-              <span className="px-3.5 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-extrabold uppercase">
-                Active Pro Plan
-              </span>
-            )}
+            <button
+              onClick={onOpenUpgradeModal}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-indigo-500/30 transition-all hover:scale-105"
+            >
+              {planConfig.id === PLANS.STARTER ? 'Upgrade to Pro Academy' : 'Manage / Switch Plan'}
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-medium pt-1">

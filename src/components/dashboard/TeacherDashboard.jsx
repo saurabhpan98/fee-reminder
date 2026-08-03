@@ -1,8 +1,8 @@
 // src/components/dashboard/TeacherDashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
-import { Building, Plus, Lock } from 'lucide-react';
+import { collection, query, where, getDocs, addDoc, doc, updateDoc } from 'firebase/firestore';
+import { Building, Plus, Lock, Sparkles, X } from 'lucide-react';
 import { canCreateCoaching, getUserPlanConfig } from '../../utils/planUtils';
 
 export const TeacherDashboard = ({ userId, userData, onOpenUpgradeModal, onSelectCoaching }) => {
@@ -18,6 +18,18 @@ export const TeacherDashboard = ({ userId, userData, onOpenUpgradeModal, onSelec
     const q = query(collection(db, 'coachings'), where('teacherId', '==', userId));
     const snap = await getDocs(q);
     setCoachings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  };
+
+  const handleDismissNotification = async () => {
+    if (userData?.uid || userId) {
+      try {
+        await updateDoc(doc(db, 'users', userData?.uid || userId), {
+          'planNotification.show': false
+        });
+      } catch (err) {
+        console.error("Error clearing plan notification:", err);
+      }
+    }
   };
 
   const handleOpenAddModal = () => {
@@ -47,9 +59,38 @@ export const TeacherDashboard = ({ userId, userData, onOpenUpgradeModal, onSelec
 
   const planConfig = getUserPlanConfig(userData);
   const canAddMoreCoaching = canCreateCoaching(userData, coachings.length);
+  const planNotif = userData?.planNotification;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      
+      {/* ONE-TIME PLAN CHANGE ALERT BANNER */}
+      {planNotif?.show && (
+        <div className="p-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl shadow-lg flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-white/20 rounded-xl backdrop-blur-xs">
+              <Sparkles size={18} className="text-amber-300" />
+            </div>
+            <div>
+              <p className="font-extrabold text-sm tracking-tight">
+                Your plan has been changed to <span className="underline decoration-amber-300 underline-offset-2">{planNotif.planName}</span>.
+              </p>
+              <p className="text-[11px] text-indigo-100 font-medium">
+                Your account feature limits and capabilities have been updated accordingly.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleDismissNotification}
+            className="p-1.5 hover:bg-white/20 rounded-xl transition-colors text-white"
+            title="Dismiss notification"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Dashboard Title & Actions Header */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Your Coaching Institutes</h1>
@@ -99,9 +140,9 @@ export const TeacherDashboard = ({ userId, userData, onOpenUpgradeModal, onSelec
         </div>
       )}
 
-      {/* Modal */}
+      {/* Add Coaching Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
             <h3 className="font-bold text-slate-800">Add Coaching Institute</h3>
             <form onSubmit={handleCreate} className="space-y-3">

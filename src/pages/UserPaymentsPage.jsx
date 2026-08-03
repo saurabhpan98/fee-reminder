@@ -3,61 +3,43 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { 
   collection, query, where, onSnapshot, 
-  addDoc, updateDoc, doc, getDocs 
+  addDoc, updateDoc, deleteDoc, doc 
 } from 'firebase/firestore';
 import { 
   Plus, CreditCard, Clock, CheckCircle, XCircle, 
-  ArrowLeft, Edit3, X, MessageSquare, History, Filter, Building2, Check, Sparkles, User
+  ArrowLeft, Edit3, X, MessageSquare, History, Check, Sparkles, Shield, Trash2, AlertTriangle
 } from 'lucide-react';
+import { getUserPlanConfig, PLAN_CONFIG, PLANS } from '../utils/planUtils';
 
 export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
   const [payments, setPayments] = useState([]);
-  const [coachings, setCoachings] = useState([]);
-  const [selectedCoachingFilter, setSelectedCoachingFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPayment, setEditingPayment] = useState(null);
+
+  // Cancel Confirmation Modal State
+  const [cancellingPayment, setCancellingPayment] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const currentPlan = getUserPlanConfig(userData);
+
   const [formData, setFormData] = useState({
-    coachingId: '',
+    paymentType: 'monthly', // 'monthly' | 'upgrade'
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
-    amount: '',
+    amount: currentPlan.price,
     paymentDetails: '',
     userRemarks: ''
   });
 
-  // Fetch all coachings owned/registered by this user
-  useEffect(() => {
-    if (!currentUser?.uid) return;
-    const fetchUserCoachings = async () => {
-      const combinedDocs = new Map();
-      const coachingRef = collection(db, 'coachings');
-      const idsToTest = Array.from(new Set([
-        currentUser.uid,
-        currentUser.email
-      ].filter(Boolean)));
-
-      for (const testId of idsToTest) {
-        const fieldQueries = [
-          getDocs(query(coachingRef, where('userId', '==', testId))),
-          getDocs(query(coachingRef, where('teacherId', '==', testId))),
-          getDocs(query(coachingRef, where('ownerId', '==', testId))),
-          getDocs(query(coachingRef, where('userEmail', '==', testId))),
-          getDocs(query(coachingRef, where('email', '==', testId)))
-        ];
-        const results = await Promise.all(fieldQueries);
-        results.forEach(snap => {
-          snap.docs.forEach(d => combinedDocs.set(d.id, { id: d.id, ...d.data() }));
-        });
-      }
-      const coachingList = Array.from(combinedDocs.values());
-      setCoachings(coachingList);
-      if (coachingList.length === 1) {
-        setFormData(prev => ({ ...prev, coachingId: coachingList[0].id }));
-      }
-    };
-    fetchUserCoachings();
-  }, [currentUser.uid, currentUser.email]);
+  const handlePaymentTypeChange = (type) => {
+    const targetAmount = type === 'upgrade' ? PLAN_CONFIG[PLANS.PRO].price : currentPlan.price;
+    setFormData(prev => ({
+      ...prev,
+      paymentType: type,
+      amount: targetAmount
+    }));
+  };
 
   // Real-time Payments Listener
   useEffect(() => {
@@ -69,7 +51,6 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(d => {
         const data = d.data();
-        
         if (data.userRead === false) {
           updateDoc(doc(db, 'payments', d.id), { userRead: true }).catch(console.error);
         }
@@ -85,10 +66,10 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
   const handleOpenAdd = () => {
     setEditingPayment(null);
     setFormData({
-      coachingId: coachings.length > 0 ? coachings[0].id : '',
+      paymentType: 'monthly',
       month: new Date().getMonth() + 1,
       year: new Date().getFullYear(),
-      amount: '',
+      amount: currentPlan.price,
       paymentDetails: '',
       userRemarks: ''
     });
@@ -97,8 +78,9 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
 
   const handleOpenEdit = (payment) => {
     setEditingPayment(payment);
+    const isUpgrade = payment.isPlanUpgradeRequest;
     setFormData({
-      coachingId: payment.coachingId || (coachings.length > 0 ? coachings[0].id : ''),
+      paymentType: isUpgrade ? 'upgrade' : 'monthly',
       month: payment.month,
       year: payment.year,
       amount: payment.amount,
@@ -110,17 +92,13 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.coachingId) {
-      alert("Please select a coaching center for this payment.");
-      return;
-    }
-    if (!formData.amount || Number(formData.amount) <= 0) {
+    if (!formData.amount || Number(formData.amount) < 0) {
       alert("Please enter a valid payment amount.");
       return;
     }
 
-    const selectedCoachingObj = coachings.find(c => c.id === formData.coachingId);
-    const coachingName = selectedCoachingObj?.name || selectedCoachingObj?.coachingName || 'Tuition Center';
+    const isUpgrade = formData.paymentType === 'upgrade';
+    const planName = isUpgrade ? PLAN_CONFIG[PLANS.PRO].name : currentPlan.name;
 
     try {
       const nowISO = new Date().toISOString();
@@ -135,8 +113,11 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
         }
 
         await updateDoc(doc(db, 'payments', editingPayment.id), {
-          coachingId: formData.coachingId,
-          coachingName: coachingName,
+          coachingId: null,
+          coachingName: isUpgrade ? 'User Account Plan Upgrade' : `Monthly Subscription (${planName})`,
+          isPlanUpgradeRequest: isUpgrade,
+          targetPlan: isUpgrade ? PLANS.PRO : (userData?.plan || PLANS.STARTER),
+          planName: planName,
           month: Number(formData.month),
           year: Number(formData.year),
           amount: Number(formData.amount),
@@ -154,8 +135,11 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
           userId: currentUser.uid,
           userName: userData?.name || currentUser.email,
           userEmail: currentUser.email,
-          coachingId: formData.coachingId,
-          coachingName: coachingName,
+          coachingId: null,
+          coachingName: isUpgrade ? 'User Account Plan Upgrade' : `Monthly Subscription (${planName})`,
+          isPlanUpgradeRequest: isUpgrade,
+          targetPlan: isUpgrade ? PLANS.PRO : (userData?.plan || PLANS.STARTER),
+          planName: planName,
           month: Number(formData.month),
           year: Number(formData.year),
           amount: Number(formData.amount),
@@ -177,16 +161,23 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
     }
   };
 
-  // Filter Payments based on Coaching selection if user has multiple coachings (Plan upgrade requests always show)
-  const filteredPayments = payments.filter(p => {
-    if (p.isPlanUpgradeRequest) return true;
-    if (coachings.length <= 1 || selectedCoachingFilter === 'all') return true;
-    return p.coachingId === selectedCoachingFilter;
-  });
+  // Delete/Cancel Payment Request directly from Database
+  const handleConfirmCancelRequest = async () => {
+    if (!cancellingPayment) return;
+    setIsDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'payments', cancellingPayment.id));
+      setCancellingPayment(null);
+    } catch (err) {
+      console.error("Error cancelling payment request:", err);
+      alert("Failed to cancel request: " + err.message);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
-  // Separate Active Processing/Rejected (Box View) from Accepted Payments (List View)
-  const activeProcessingPayments = filteredPayments.filter(p => p.status === 'pending' || p.status === 'rejected');
-  const acceptedPayments = filteredPayments.filter(p => p.status === 'accepted');
+  const activeProcessingPayments = payments.filter(p => p.status === 'pending' || p.status === 'rejected');
+  const acceptedPayments = payments.filter(p => p.status === 'accepted');
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300">
@@ -210,35 +201,19 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
           <div>
             <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Payment History & Requests</h1>
-            <p className="text-xs text-slate-500 mt-0.5">Submit payment details for admin approval and view transaction history</p>
+            <p className="text-xs text-slate-500 mt-0.5">Submit subscription payment details for admin approval and view transaction history</p>
           </div>
-
-          {/* Render Filter ONLY if user has more than 1 coaching */}
-          {coachings.length > 1 && (
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-2xl">
-              <Filter size={14} className="text-slate-400 ml-1" />
-              <label className="text-xs font-bold text-slate-500">Coaching:</label>
-              <select
-                value={selectedCoachingFilter}
-                onChange={(e) => setSelectedCoachingFilter(e.target.value)}
-                className="bg-transparent border-none text-xs font-bold text-slate-800 outline-none cursor-pointer pr-2"
-              >
-                <option value="all">All Coachings ({coachings.length})</option>
-                {coachings.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.name || c.coachingName}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="px-3.5 py-1.5 bg-slate-900 text-white rounded-2xl text-xs font-bold flex items-center gap-2">
+            <Sparkles size={14} className="text-amber-400" />
+            <span>Current Plan: {currentPlan.name}</span>
+          </div>
         </div>
 
         {loading ? (
           <div className="py-12 text-center text-slate-400 text-xs font-medium">Loading payments...</div>
         ) : (
           <>
-            {/* 1. UNDER PROCESSING & REJECTED PAYMENTS (BOX CARDS VIEW) */}
+            {/* 1. ACTIVE REQUESTS & PROCESSING (CARDS VIEW) */}
             <div className="space-y-3">
               <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
                 <Clock size={16} className="text-amber-500" /> Active Requests & Processing ({activeProcessingPayments.length})
@@ -273,15 +248,15 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                               </span>
                               <h3 className="text-xl font-black mt-0.5">₹ {p.amount}</h3>
 
-                              {/* Show Plan Upgrade Badge if plan upgrade request, else show Coaching Name */}
                               {p.isPlanUpgradeRequest ? (
                                 <p className="text-[11px] font-extrabold text-indigo-700 flex items-center gap-1.5 mt-1 bg-indigo-100/80 px-2.5 py-1 rounded-lg w-fit">
                                   <Sparkles size={13} className="text-indigo-600 shrink-0" />
-                                  <span>User Account Plan Upgrade</span>
+                                  <span>User Account Plan Upgrade (Pro Academy)</span>
                                 </p>
                               ) : (
-                                <p className="text-[11px] font-extrabold text-indigo-700 flex items-center gap-1 mt-1">
-                                  <Building2 size={12} /> {p.coachingName || 'Tuition Center'}
+                                <p className="text-[11px] font-extrabold text-slate-700 flex items-center gap-1.5 mt-1 bg-slate-100 px-2.5 py-1 rounded-lg w-fit">
+                                  <Shield size={13} className="text-indigo-600 shrink-0" />
+                                  <span>Monthly Payment ({p.planName || currentPlan.name})</span>
                                 </p>
                               )}
                             </div>
@@ -331,16 +306,24 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                           ) : null}
                         </div>
 
-                        {isRejected && !p.isPlanUpgradeRequest && (
-                          <div className="pt-2 border-t border-rose-200 flex justify-end">
+                        {/* Card Actions: Edit (if rejected) & Cancel Request */}
+                        <div className="pt-2 border-t border-slate-200/60 flex justify-end items-center gap-2">
+                          <button
+                            onClick={() => setCancellingPayment(p)}
+                            className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1"
+                          >
+                            <Trash2 size={13} /> Cancel Request
+                          </button>
+
+                          {isRejected && (
                             <button
                               onClick={() => handleOpenEdit(p)}
-                              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+                              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1"
                             >
-                              <Edit3 size={14} /> Edit & Resubmit
+                              <Edit3 size={13} /> Edit & Resubmit
                             </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -348,7 +331,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
               )}
             </div>
 
-            {/* 2. ACCEPTED PAYMENTS HISTORY (TABLE LIST VIEW LIKE ADMIN PORTAL) */}
+            {/* 2. ACCEPTED PAYMENTS HISTORY TABLE */}
             <div className="space-y-3 pt-6 border-t border-slate-100">
               <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
                 <CheckCircle size={16} className="text-emerald-600" /> Approved Payments History ({acceptedPayments.length})
@@ -358,7 +341,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
                     <tr>
-                      <th className="px-4 py-3 font-bold">Type / Coaching</th>
+                      <th className="px-4 py-3 font-bold">Type of Payment</th>
                       <th className="px-4 py-3 font-bold">Month/Year</th>
                       <th className="px-4 py-3 font-bold">Amount</th>
                       <th className="px-4 py-3 font-bold">Date of Payment</th>
@@ -381,11 +364,13 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                         <tr key={p.id}>
                           <td className="px-4 py-3 font-extrabold text-indigo-700">
                             {p.isPlanUpgradeRequest ? (
-                              <span className="flex items-center gap-1 text-indigo-700">
-                                <Sparkles size={13} className="text-amber-500" /> User Plan Upgrade
+                              <span className="flex items-center gap-1.5 text-indigo-700">
+                                <Sparkles size={13} className="text-amber-500" /> Plan Upgrade to Pro Academy
                               </span>
                             ) : (
-                              p.coachingName || 'Tuition Center'
+                              <span className="flex items-center gap-1.5 text-slate-700">
+                                <Shield size={13} className="text-indigo-600" /> Monthly Payment (Current Plan: {p.planName || currentPlan.name})
+                              </span>
                             )}
                           </td>
                           <td className="px-4 py-3 font-bold text-slate-800">
@@ -421,6 +406,50 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
         )}
       </div>
 
+      {/* Cancel Request Confirmation Modal */}
+      {cancellingPayment && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl border border-rose-100">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-100 rounded-2xl"><AlertTriangle size={22}/></div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base">Cancel Payment Request?</h3>
+                <p className="text-xs text-slate-500">Delete request from database</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-rose-50/60 rounded-2xl border border-rose-100 text-xs text-slate-700 space-y-1">
+              <p>Type: <strong>{cancellingPayment.isPlanUpgradeRequest ? 'User Account Plan Upgrade' : 'Monthly Subscription'}</strong></p>
+              <p>Amount: <strong>₹ {cancellingPayment.amount}</strong></p>
+              <p>Details: <strong>{cancellingPayment.paymentDetails || 'N/A'}</strong></p>
+              <p className="text-rose-600 font-bold pt-1">
+                This request will be permanently removed from both your portal and the Admin Dashboard.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setCancellingPayment(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
+              >
+                Keep Request
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancelRequest}
+                disabled={isDeleting}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
+              >
+                <Trash2 size={14} />
+                {isDeleting ? 'Deleting...' : 'Yes, Delete & Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add / Edit Payment Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
@@ -428,32 +457,50 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
                 <CreditCard size={18} className="text-indigo-600" />
-                {editingPayment ? 'Resubmit Payment Details' : 'Add New Payment'}
+                {editingPayment ? 'Resubmit Payment Details' : 'Add Subscription Payment'}
               </h3>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Coaching / Tuition</label>
-                <select
-                  required
-                  value={formData.coachingId}
-                  onChange={(e) => setFormData({ ...formData, coachingId: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
-                >
-                  <option value="" disabled>-- Select Coaching Center --</option>
-                  {coachings.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.name || c.coachingName}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Payment Type</label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => handlePaymentTypeChange('monthly')}
+                    className={`py-2 rounded-xl transition-all ${
+                      formData.paymentType === 'monthly' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'
+                    }`}
+                  >
+                    Monthly Payment
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePaymentTypeChange('upgrade')}
+                    className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                      formData.paymentType === 'upgrade' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500'
+                    }`}
+                  >
+                    <Sparkles size={12} /> Plan Upgrade
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-900 text-white rounded-2xl text-xs space-y-1">
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Target Account Subscription Plan:</span>
+                <p className="font-extrabold text-sm flex items-center gap-1.5">
+                  <Shield size={14} className="text-amber-400" />
+                  {formData.paymentType === 'upgrade' ? PLAN_CONFIG[PLANS.PRO].name : currentPlan.name}
+                </p>
+                <p className="text-[11px] text-slate-300">
+                  Default price: {formData.paymentType === 'upgrade' ? PLAN_CONFIG[PLANS.PRO].priceLabel : currentPlan.priceLabel}
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Month</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Billing Month</label>
                   <select
                     value={formData.month}
                     onChange={(e) => setFormData({ ...formData, month: Number(e.target.value) })}
@@ -467,7 +514,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Year</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Billing Year</label>
                   <select
                     value={formData.year}
                     onChange={(e) => setFormData({ ...formData, year: Number(e.target.value) })}
@@ -481,11 +528,11 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Amount Paid (₹)</label>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Amount (Auto-set by plan)</label>
                 <input
                   type="number"
                   required
-                  placeholder="e.g. 1500"
+                  placeholder="e.g. 1200"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
