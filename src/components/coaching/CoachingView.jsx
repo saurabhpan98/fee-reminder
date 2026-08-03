@@ -1,11 +1,12 @@
 // src/components/coaching/CoachingView.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../firebase';
 import { collection, getDocs, addDoc, updateDoc, setDoc, doc } from 'firebase/firestore';
 import { RemindersTab } from './RemindersTab';
 import { 
   Plus, BookOpen, Bell, ArrowLeft, Search, X, 
-  Layers, Bookmark, ChevronRight, AlertCircle, Users, Calendar 
+  Layers, Bookmark, ChevronRight, AlertCircle, Users, Calendar,
+  UserPlus
 } from 'lucide-react';
 
 export const CoachingView = ({ 
@@ -23,6 +24,10 @@ export const CoachingView = ({
   const [selectedSubjectId, setSelectedSubjectId] = useState(initialState.selectedSubjectId || '');
   const [enrollmentStatusFilter, setEnrollmentStatusFilter] = useState(initialState.enrollmentStatusFilter || 'all');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Quick Action Dropdown (+ Button) State
+  const [showQuickMenu, setShowQuickMenu] = useState(false);
+  const quickMenuRef = useRef(null);
 
   // Roster Month & Year Filter
   const [selectedMonth, setSelectedMonth] = useState(initialState.selectedMonth || new Date().getMonth() + 1);
@@ -44,6 +49,19 @@ export const CoachingView = ({
   const [newClassName, setNewClassName] = useState('');
   const [targetClassForSubject, setTargetClassForSubject] = useState('');
   const [subjectForm, setSubjectForm] = useState({ name: '', teacherName: '' });
+
+  // Close Quick Action Dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (quickMenuRef.current && !quickMenuRef.current.contains(e.target)) {
+        setShowQuickMenu(false);
+      }
+    };
+    if (showQuickMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showQuickMenu]);
 
   useEffect(() => {
     fetchCoachingData();
@@ -315,33 +333,75 @@ export const CoachingView = ({
       </div>
 
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl border border-slate-200/70 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xs">
+      <div className="bg-white rounded-3xl border border-slate-200/70 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xs relative">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800">{coaching.name}</h1>
           <p className="text-xs text-slate-500 font-medium mt-1">Owner: {coaching.ownerName} | Location: {coaching.address}</p>
         </div>
-        <div className="flex flex-wrap gap-2 w-full md:w-auto">
+
+        {/* Animated Plus Button Action */}
+        <div className="relative" ref={quickMenuRef}>
           <button
-            onClick={() => setShowAddClassModal(true)}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-all"
+            onClick={() => setShowQuickMenu(!showQuickMenu)}
+            className={`w-11 h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all duration-300 transform active:scale-95 ${
+              showQuickMenu ? 'rotate-45 bg-slate-900 hover:bg-slate-800' : 'hover:scale-105'
+            }`}
+            title="Quick Options"
           >
-            + Add Class
+            <Plus size={22} className="transition-transform duration-300" />
           </button>
-          <button
-            onClick={() => {
-              setTargetClassForSubject(classes[0]?.id || '');
-              setShowAddSubjectModal(true);
-            }}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-all"
-          >
-            + Add Subject
-          </button>
-          <button
-            onClick={onOpenAddStudent}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-100 flex items-center gap-1.5 transition-all"
-          >
-            <Plus size={16} /> Add Student
-          </button>
+
+          {/* Smooth Dropdown Menu */}
+          {showQuickMenu && (
+            <div className="absolute right-0 mt-3 w-52 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/80 p-2 z-50 animate-in fade-in slide-in-from-top-3 duration-200 space-y-1">
+              <div className="px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1">
+                Quick Options
+              </div>
+
+              {/* Option 1: Add Class */}
+              <button
+                onClick={() => {
+                  setShowQuickMenu(false);
+                  setShowAddClassModal(true);
+                }}
+                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-indigo-50/70 transition-all flex items-center gap-2.5 group"
+              >
+                <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                  <Layers size={15} />
+                </div>
+                <span>Add Class</span>
+              </button>
+
+              {/* Option 2: Add Subject */}
+              <button
+                onClick={() => {
+                  setShowQuickMenu(false);
+                  setTargetClassForSubject(classes[0]?.id || '');
+                  setShowAddSubjectModal(true);
+                }}
+                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-indigo-50/70 transition-all flex items-center gap-2.5 group"
+              >
+                <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                  <Bookmark size={15} />
+                </div>
+                <span>Add Subject</span>
+              </button>
+
+              {/* Option 3: Add Student */}
+              <button
+                onClick={() => {
+                  setShowQuickMenu(false);
+                  onOpenAddStudent();
+                }}
+                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50/50 hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2.5 group"
+              >
+                <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-600 group-hover:bg-white/20 group-hover:text-white transition-colors">
+                  <UserPlus size={15} />
+                </div>
+                <span>Add Student</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -662,7 +722,7 @@ export const CoachingView = ({
 
           {classes.length === 0 && (
             <div className="bg-white rounded-3xl border p-12 text-center text-slate-400 text-sm">
-              No classes created yet. Click "+ Add Class" to get started.
+              No classes created yet. Click "+" to create your first class.
             </div>
           )}
         </div>
@@ -717,7 +777,7 @@ export const CoachingView = ({
 
           {totalSubjectsCount === 0 && (
             <div className="bg-white rounded-3xl border p-12 text-center text-slate-400 text-sm">
-              No subjects created yet. Click "+ Add Subject" to create one.
+              No subjects created yet. Click "+" to create your first subject.
             </div>
           )}
         </div>
