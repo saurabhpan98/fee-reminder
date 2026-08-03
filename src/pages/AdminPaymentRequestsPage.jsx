@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { ArrowLeft, Check, XCircle, CreditCard, MessageSquare, History, Building2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Check, XCircle, CreditCard, MessageSquare, History, Building2, Sparkles, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { PLANS, PLAN_CONFIG } from '../utils/planUtils';
 
 export const AdminPaymentRequestsPage = ({ onBack }) => {
@@ -10,6 +10,19 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
   const [loading, setLoading] = useState(true);
   const [activeModal, setActiveModal] = useState(null);
   const [adminRemark, setAdminRemark] = useState('');
+
+  // Toast Notification State
+  const [toastInfo, setToastInfo] = useState(null); // { message, isError }
+
+  // Auto-dismiss Toast after 4 seconds
+  useEffect(() => {
+    if (toastInfo) {
+      const timer = setTimeout(() => {
+        setToastInfo(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastInfo]);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'payments'), (snapshot) => {
@@ -29,6 +42,7 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
   const handleConfirmAction = async (e) => {
     e.preventDefault();
     if (!activeModal) return;
+
     const { payment, action } = activeModal;
     const isAccept = action === 'accept';
     const nowISO = new Date().toISOString();
@@ -70,18 +84,50 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
         });
       }
 
+      const userName = payment.userName || 'User';
+
+      // Trigger respective Toast Message
+      if (isAccept) {
+        if (payment.isPlanUpgradeRequest) {
+          setToastInfo({
+            message: `Plan upgrade request accepted for ${userName}`,
+            isError: false
+          });
+        } else {
+          setToastInfo({
+            message: `Payment request accepted for ${userName}`,
+            isError: false
+          });
+        }
+      } else {
+        if (payment.isPlanUpgradeRequest) {
+          setToastInfo({
+            message: `Plan upgrade request rejected for ${userName}`,
+            isError: true
+          });
+        } else {
+          setToastInfo({
+            message: `Payment request rejected for ${userName}`,
+            isError: true
+          });
+        }
+      }
+
       setActiveModal(null);
       setAdminRemark('');
     } catch (err) {
       console.error("Error updating payment status:", err);
-      alert("Failed to update status: " + err.message);
+      setToastInfo({
+        message: `Failed to update status: ${err.message}`,
+        isError: true
+      });
     }
   };
 
   const activeRequests = payments.filter(p => p.status === 'pending' || p.status === 'rejected');
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300">
+    <div className="max-w-6xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300 relative">
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
@@ -156,7 +202,7 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
                       <span className="text-[10px] font-extrabold uppercase opacity-70">
                         {monthName} {p.year}
                       </span>
-                      <p className="text-2xl font-black text-slate-900">₹ {p.amount}</p>
+                      <p className="text-2xl font-black text-slate-900">₹{p.amount}</p>
                     </div>
 
                     <div className="text-xs space-y-1 bg-white/70 p-3 rounded-xl border border-black/5">
@@ -222,7 +268,7 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
               {!activeModal.payment.isPlanUpgradeRequest && (
                 <p>Coaching: <strong>{activeModal.payment.coachingName || 'Tuition Center'}</strong></p>
               )}
-              <p>Amount: <strong>₹ {activeModal.payment.amount}</strong></p>
+              <p>Amount: <strong>₹{activeModal.payment.amount}</strong></p>
               {activeModal.payment.isPlanUpgradeRequest && (
                 <p className="text-indigo-600 font-extrabold pt-1">
                   ★ Will automatically upgrade user account plan to PRO ACADEMY upon acceptance!
@@ -260,6 +306,28 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification at Bottom Right */}
+      {toastInfo && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
+          <div className={`px-4 py-3 rounded-2xl shadow-2xl border flex items-center gap-3 max-w-sm text-xs font-bold text-white ${
+            toastInfo.isError
+              ? 'bg-rose-600 border-rose-700'
+              : 'bg-emerald-600 border-emerald-700'
+          }`}>
+            <div className="p-1.5 bg-white/20 rounded-xl shrink-0">
+              {toastInfo.isError ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+            </div>
+            <p className="flex-1 leading-snug">{toastInfo.message}</p>
+            <button
+              onClick={() => setToastInfo(null)}
+              className="p-1 hover:bg-white/20 rounded-lg transition-colors shrink-0"
+            >
+              <X size={16} />
+            </button>
           </div>
         </div>
       )}
