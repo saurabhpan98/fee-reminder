@@ -7,7 +7,7 @@ import {
 } from 'firebase/firestore';
 import { 
   Plus, CreditCard, Clock, CheckCircle, XCircle, 
-  ArrowLeft, Edit3, X, MessageSquare, History, Check, Sparkles, Shield, Trash2, AlertTriangle
+  ArrowLeft, Edit3, X, MessageSquare, History, Check, Sparkles, Shield, Trash2, AlertTriangle, AlertCircle
 } from 'lucide-react';
 import { getUserPlanConfig, PLAN_CONFIG, PLANS } from '../utils/planUtils';
 
@@ -21,8 +21,8 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
   const [cancellingPayment, setCancellingPayment] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Inline Validation Error State for Form
-  const [formError, setFormError] = useState('');
+  // Toast Notification State
+  const [toastInfo, setToastInfo] = useState(null); // { message }
 
   const currentPlan = getUserPlanConfig(userData);
 
@@ -34,6 +34,16 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
     paymentDetails: '',
     userRemarks: ''
   });
+
+  // Auto-dismiss Toast Notification after 4 seconds
+  useEffect(() => {
+    if (toastInfo) {
+      const timer = setTimeout(() => {
+        setToastInfo(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastInfo]);
 
   // Real-time Payments Listener
   useEffect(() => {
@@ -63,7 +73,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
   );
 
   const handlePaymentTypeChange = (type) => {
-    setFormError('');
+    setToastInfo(null);
     const targetAmount = type === 'upgrade' ? PLAN_CONFIG[PLANS.PRO].price : currentPlan.price;
     setFormData(prev => ({
       ...prev,
@@ -74,7 +84,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
 
   const handleOpenAdd = () => {
     setEditingPayment(null);
-    setFormError('');
+    setToastInfo(null);
     setFormData({
       paymentType: 'monthly',
       month: new Date().getMonth() + 1,
@@ -88,7 +98,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
 
   const handleOpenEdit = (payment) => {
     setEditingPayment(payment);
-    setFormError('');
+    setToastInfo(null);
     const isUpgrade = payment.isPlanUpgradeRequest;
     setFormData({
       paymentType: isUpgrade ? 'upgrade' : 'monthly',
@@ -103,18 +113,18 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setFormError('');
+    setToastInfo(null);
 
     const isUpgrade = formData.paymentType === 'upgrade';
 
-    // Check upon form submission
+    // Show Red Toast Notification at bottom if already submitted
     if (isUpgrade && !editingPayment && hasExistingUpgradeRequest) {
-      setFormError('already submitted.');
+      setToastInfo({ message: 'Request already submitted.' });
       return;
     }
 
     if (!formData.amount || Number(formData.amount) < 0) {
-      setFormError('Please enter a valid payment amount.');
+      setToastInfo({ message: 'Please enter a valid payment amount.' });
       return;
     }
 
@@ -177,7 +187,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
       setEditingPayment(null);
     } catch (err) {
       console.error("Error saving payment:", err);
-      setFormError("Failed to submit payment: " + err.message);
+      setToastInfo({ message: "Failed to submit payment: " + err.message });
     }
   };
 
@@ -200,7 +210,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
   const acceptedPayments = payments.filter(p => p.status === 'accepted');
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300">
+    <div className="max-w-5xl mx-auto space-y-6 pb-12 animate-in fade-in duration-300 relative">
       {/* Top Navigation */}
       <div className="flex items-center justify-between">
         <button
@@ -482,14 +492,6 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
             </div>
 
-            {/* Dynamic Error Message on Submit Attempt */}
-            {formError && (
-              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in duration-200">
-                <AlertTriangle size={18} className="shrink-0 text-amber-600" />
-                <span>{formError}</span>
-              </div>
-            )}
-
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Payment Type</label>
@@ -573,10 +575,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                   type="text"
                   placeholder="e.g. Paid via UPI Txn ID: 9876XXXX"
                   value={formData.paymentDetails}
-                  onChange={(e) => {
-                    setFormData({ ...formData, paymentDetails: e.target.value });
-                    if (formError) setFormError('');
-                  }}
+                  onChange={(e) => setFormData({ ...formData, paymentDetails: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
@@ -587,10 +586,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                   rows="2"
                   placeholder="Add any extra notes..."
                   value={formData.userRemarks}
-                  onChange={(e) => {
-                    setFormData({ ...formData, userRemarks: e.target.value });
-                    if (formError) setFormError('');
-                  }}
+                  onChange={(e) => setFormData({ ...formData, userRemarks: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
@@ -611,6 +607,24 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Red Notification Toast at Bottom Right */}
+      {toastInfo && (
+        <div className="fixed bottom-6 right-6 z-[60] animate-in slide-in-from-bottom-5 fade-in duration-300">
+          <div className="px-4 py-3 rounded-2xl shadow-2xl border bg-rose-600 border-rose-700 text-white flex items-center gap-3 max-w-sm text-xs font-bold">
+            <div className="p-1.5 bg-white/20 rounded-xl shrink-0">
+              <AlertCircle size={18} />
+            </div>
+            <p className="flex-1 leading-snug">{toastInfo.message}</p>
+            <button
+              onClick={() => setToastInfo(null)}
+              className="p-1 hover:bg-white/20 rounded-lg transition-colors shrink-0"
+            >
+              <X size={16} />
+            </button>
           </div>
         </div>
       )}
