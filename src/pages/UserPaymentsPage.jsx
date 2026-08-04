@@ -367,9 +367,9 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                 <CheckCircle size={16} className="text-emerald-600" /> Approved Payments History ({acceptedPayments.length})
               </h3>
 
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-[220px] overflow-y-auto border border-slate-100 rounded-2xl shadow-xs">
                 <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
+                  <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider sticky top-0 z-10">
                     <tr>
                       <th className="px-4 py-3 font-bold">Type of Payment</th>
                       <th className="px-4 py-3 font-bold">Month/Year</th>
