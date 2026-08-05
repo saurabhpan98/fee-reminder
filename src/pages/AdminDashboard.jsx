@@ -253,14 +253,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     return paymentSortOrder === 'latest' ? timeB - timeA : timeA - timeB;
   });
 
-  if (viewingRequests) {
-    return (
-      <div className="min-h-screen bg-slate-100/70 font-sans text-slate-800 pb-12 pt-6 px-4 sm:px-6">
-        <AdminPaymentRequestsPage onBack={() => setViewingRequests(false)} />
-      </div>
-    );
-  }
-
   const selectedUserPlanConfig = PLAN_CONFIG[selectedUser?.plan || PLANS.STARTER];
 
   return (
@@ -334,310 +326,317 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-8">
-        {!selectedUser ? (
-          <div className="bg-white rounded-3xl border border-slate-200/70 p-6 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
-              <div>
-                <h2 className="text-lg font-extrabold text-slate-900">Registered System Users</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Click on any user row to manage profile, view payments, or change plan</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Filter size={14} className="text-slate-400" />
-                <label className="text-xs font-bold text-slate-500">Filter:</label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                >
-                  <option value="all">All Accounts ({users.length})</option>
-                  <option value="active">Active Only</option>
-                  <option value="stopped">Stopped Only</option>
-                  <option value="deleted">Deleted Only</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
-                  <tr>
-                    <th className="px-5 py-3.5 font-bold">Name</th>
-                    <th className="px-5 py-3.5 font-bold">Email</th>
-                    <th className="px-5 py-3.5 font-bold">Active Plan</th>
-                    <th className="px-5 py-3.5 font-bold">Coachings</th>
-                    <th className="px-5 py-3.5 font-bold">Account Status</th>
-                    <th className="px-5 py-3.5 font-bold text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium text-xs">
-                  {sortedUsers.map((u) => {
-                    const planInfo = PLAN_CONFIG[u.plan || PLANS.STARTER];
-                    return (
-                      <tr
-                        key={u.uid}
-                        onClick={() => handleOpenUserProfile(u)}
-                        className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
-                      >
-                        <td className="px-5 py-4 font-bold text-slate-900">{u.name || 'Unnamed User'}</td>
-                        <td className="px-5 py-4 text-slate-600">{u.email}</td>
-                        <td className="px-5 py-4 font-bold">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                            u.plan === PLANS.PRO ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700'
-                          }`}>
-                            {planInfo.name}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 font-bold text-indigo-600">{u.coachingCount ?? 0} Registered</td>
-                        <td className="px-5 py-4">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                            u.status === 'stopped' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
-                            u.status === 'deleted' ? 'bg-rose-50 text-rose-600 border border-rose-200' :
-                            'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                          }`}>
-                            {u.status || 'active'}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          <button className="px-3.5 py-1.5 border border-slate-200 rounded-xl font-bold hover:bg-white text-slate-600">
-                            Manage Profile
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {sortedUsers.length === 0 && (
-                <div className="p-8 text-center text-slate-400 text-xs font-medium">
-                  No users found matching the selected filter.
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* User Profile Sub-Page */
-          <div className="space-y-6">
-            <button
-              onClick={() => setSelectedUser(null)}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-xs"
-            >
-              <ArrowLeft size={16} /> Back to Users List
-            </button>
-
-            <div className="bg-white rounded-3xl border border-slate-200/70 p-6 shadow-xs space-y-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-6">
+      {viewingRequests ? (
+        <div className="min-h-screen bg-slate-100/70 font-sans text-slate-800 pb-12 pt-6 px-4 sm:px-6">
+          <AdminPaymentRequestsPage onBack={() => setViewingRequests(false)} />
+        </div>
+      ) : (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-8">
+          {!selectedUser ? (
+            <div className="bg-white rounded-3xl border border-slate-200/70 p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
                 <div>
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-2xl font-extrabold text-slate-900">{selectedUser.name || 'User Profile'}</h2>
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                      selectedUser.status === 'stopped' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
-                      selectedUser.status === 'deleted' ? 'bg-rose-50 text-rose-600 border border-rose-200' :
-                      'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                    }`}>
-                      {selectedUser.status || 'active'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1 font-medium">{selectedUser.email}</p>
+                  <h2 className="text-lg font-extrabold text-slate-900">Registered System Users</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Click on any user row to manage profile, view payments, or change plan</p>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={() => setChatPartner(selectedUser)}
-                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100 transition-all flex items-center gap-1.5"
-                  >
-                    <MessageSquare size={14} /> Open Direct Chat
-                  </button>
-
-                  {selectedUser.status !== 'deleted' && (
-                    <button
-                      onClick={handleToggleUserStatus}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
-                        selectedUser.status === 'stopped' 
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                          : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                      }`}
-                    >
-                      {selectedUser.status === 'stopped' ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
-                      {selectedUser.status === 'stopped' ? 'Resume User Activity' : 'Pause User Activity'}
-                    </button>
-                  )}
-
-                  {selectedUser.status !== 'deleted' && (
-                    <button
-                      onClick={() => setShowDeleteUserModal(true)}
-                      className="px-4 py-2.5 bg-rose-50 text-rose-600 border border-rose-100 hover:bg-rose-100 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
-                    >
-                      <Trash2 size={14} /> Delete Account
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* ADMIN PLAN MANAGEMENT BOX */}
-              <div className="p-5 bg-slate-900 text-white rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md">
-                <div>
-                  <span className="text-[10px] font-extrabold uppercase text-indigo-400">Current User Subscribed Plan</span>
-                  <h3 className="text-lg font-extrabold text-white mt-0.5 flex items-center gap-2">
-                    <Sparkles size={16} className="text-amber-400" /> {selectedUserPlanConfig.name}
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Max Coachings: {selectedUserPlanConfig.maxCoachings} | Max Students: {selectedUserPlanConfig.maxStudents === Infinity ? 'Unlimited' : selectedUserPlanConfig.maxStudents}
-                  </p>
-                </div>
-
                 <div className="flex items-center gap-2">
-                  <label className="text-xs font-bold text-slate-300">Set Plan:</label>
+                  <Filter size={14} className="text-slate-400" />
+                  <label className="text-xs font-bold text-slate-500">Filter:</label>
                   <select
-                    value={selectedUser.plan || PLANS.STARTER}
-                    onChange={(e) => handleAdminChangePlan(e.target.value)}
-                    className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-white outline-none cursor-pointer"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
                   >
-                    <option value={PLANS.STARTER}>Starter Teacher (Free)</option>
-                    <option value={PLANS.PRO}>Pro Academy (₹1,200/mo)</option>
+                    <option value="all">All Accounts ({users.length})</option>
+                    <option value="active">Active Only</option>
+                    <option value="stopped">Stopped Only</option>
+                    <option value="deleted">Deleted Only</option>
                   </select>
                 </div>
               </div>
 
-              {/* Registered Coachings */}
-              <div className="space-y-3">
-                <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-                  <Building2 size={16} className="text-indigo-600" /> Registered Coachings/Tuitions ({userCoachings.length})
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm whitespace-nowrap">
-                    <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
-                      <tr>
-                        <th className="px-4 py-3 font-bold">Coaching Center Name</th>
-                        <th className="px-4 py-3 font-bold">Owner Name</th>
-                        <th className="px-4 py-3 font-bold">Address</th>
-                        <th className="px-4 py-3 font-bold">Date Created</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                      {userCoachings.map(c => {
-                        const createdDate = c.createdAt 
-                          ? new Date(c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                          : 'N/A';
-                        return (
-                          <tr key={c.id}>
-                            <td className="px-4 py-3 font-bold text-slate-800">{c.name || c.coachingName || 'N/A'}</td>
-                            <td className="px-4 py-3 text-slate-600">{c.ownerName || c.teacherName || 'N/A'}</td>
-                            <td className="px-4 py-3 text-slate-500">{c.address || 'N/A'}</td>
-                            <td className="px-4 py-3 font-bold text-indigo-700 flex items-center gap-1.5">
-                              <Calendar size={13} className="text-indigo-500 shrink-0" />
-                              {createdDate}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
+                    <tr>
+                      <th className="px-5 py-3.5 font-bold">Name</th>
+                      <th className="px-5 py-3.5 font-bold">Email</th>
+                      <th className="px-5 py-3.5 font-bold">Active Plan</th>
+                      <th className="px-5 py-3.5 font-bold">Coachings</th>
+                      <th className="px-5 py-3.5 font-bold">Account Status</th>
+                      <th className="px-5 py-3.5 font-bold text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-xs">
+                    {sortedUsers.map((u) => {
+                      const planInfo = PLAN_CONFIG[u.plan || PLANS.STARTER];
+                      return (
+                        <tr
+                          key={u.uid}
+                          onClick={() => handleOpenUserProfile(u)}
+                          className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
+                        >
+                          <td className="px-5 py-4 font-bold text-slate-900">{u.name || 'Unnamed User'}</td>
+                          <td className="px-5 py-4 text-slate-600">{u.email}</td>
+                          <td className="px-5 py-4 font-bold">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                              u.plan === PLANS.PRO ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              {planInfo.name}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 font-bold text-indigo-600">{u.coachingCount ?? 0} Registered</td>
+                          <td className="px-5 py-4">
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                              u.status === 'stopped' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
+                              u.status === 'deleted' ? 'bg-rose-50 text-rose-600 border border-rose-200' :
+                              'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                            }`}>
+                              {u.status || 'active'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 text-right">
+                            <button className="px-3.5 py-1.5 border border-slate-200 rounded-xl font-bold hover:bg-white text-slate-600">
+                              Manage Profile
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
 
-                  {userCoachings.length === 0 && (
-                    <div className="p-6 text-center text-slate-400 text-xs font-medium">
-                      No coachings found for this user.
-                    </div>
-                  )}
-                </div>
+                {sortedUsers.length === 0 && (
+                  <div className="p-8 text-center text-slate-400 text-xs font-medium">
+                    No users found matching the selected filter.
+                  </div>
+                )}
               </div>
+            </div>
+          ) : (
+            /* User Profile Sub-Page */
+            <div className="space-y-6">
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-xs"
+              >
+                <ArrowLeft size={16} /> Back to Users List
+              </button>
 
-              {/* User Subscription Payment Submissions History */}
-              <div className="space-y-3 pt-4 border-t border-slate-100">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                  <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-                    <CreditCard size={16} className="text-indigo-600" /> Account Payment Submissions ({userPayments.length})
-                  </h3>
-                  
-                  <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
-                    <ArrowUpDown size={13} className="text-slate-400" />
-                    <label className="font-bold text-slate-500">Sort Month/Year:</label>
-                    <select
-                      value={paymentSortOrder}
-                      onChange={(e) => setPaymentSortOrder(e.target.value)}
-                      className="bg-transparent border-none font-bold text-slate-800 outline-none cursor-pointer"
+              <div className="bg-white rounded-3xl border border-slate-200/70 p-6 shadow-xs space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-6">
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-2xl font-extrabold text-slate-900">{selectedUser.name || 'User Profile'}</h2>
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                        selectedUser.status === 'stopped' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
+                        selectedUser.status === 'deleted' ? 'bg-rose-50 text-rose-600 border border-rose-200' :
+                        'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                      }`}>
+                        {selectedUser.status || 'active'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">{selectedUser.email}</p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => setChatPartner(selectedUser)}
+                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100 transition-all flex items-center gap-1.5"
                     >
-                      <option value="latest">Latest Month/Year First</option>
-                      <option value="oldest">Oldest Month/Year First</option>
+                      <MessageSquare size={14} /> Open Direct Chat
+                    </button>
+
+                    {selectedUser.status !== 'deleted' && (
+                      <button
+                        onClick={handleToggleUserStatus}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                          selectedUser.status === 'stopped' 
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                            : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                        }`}
+                      >
+                        {selectedUser.status === 'stopped' ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
+                        {selectedUser.status === 'stopped' ? 'Resume User Activity' : 'Pause User Activity'}
+                      </button>
+                    )}
+
+                    {selectedUser.status !== 'deleted' && (
+                      <button
+                        onClick={() => setShowDeleteUserModal(true)}
+                        className="px-4 py-2.5 bg-rose-50 text-rose-600 border border-rose-100 hover:bg-rose-100 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                      >
+                        <Trash2 size={14} /> Delete Account
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* ADMIN PLAN MANAGEMENT BOX */}
+                <div className="p-5 bg-slate-900 text-white rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase text-indigo-400">Current User Subscribed Plan</span>
+                    <h3 className="text-lg font-extrabold text-white mt-0.5 flex items-center gap-2">
+                      <Sparkles size={16} className="text-amber-400" /> {selectedUserPlanConfig.name}
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Max Coachings: {selectedUserPlanConfig.maxCoachings} | Max Students: {selectedUserPlanConfig.maxStudents === Infinity ? 'Unlimited' : selectedUserPlanConfig.maxStudents}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-bold text-slate-300">Set Plan:</label>
+                    <select
+                      value={selectedUser.plan || PLANS.STARTER}
+                      onChange={(e) => handleAdminChangePlan(e.target.value)}
+                      className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-white outline-none cursor-pointer"
+                    >
+                      <option value={PLANS.STARTER}>Starter Teacher (Free)</option>
+                      <option value={PLANS.PRO}>Pro Academy (₹1,200/mo)</option>
                     </select>
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm whitespace-nowrap">
-                    <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
-                      <tr>
-                        <th className="px-4 py-3 font-bold">Type of Payment</th>
-                        <th className="px-4 py-3 font-bold">Month/Year</th>
-                        <th className="px-4 py-3 font-bold">Amount</th>
-                        <th className="px-4 py-3 font-bold">Date of Payment</th>
-                        <th className="px-4 py-3 font-bold">Date of Acceptance</th>
-                        <th className="px-4 py-3 font-bold">Details</th>
-                        <th className="px-4 py-3 font-bold">Status</th>
-                        <th className="px-4 py-3 font-bold">Admin Remarks</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                      {sortedUserPayments.map(p => {
-                        const submissionDate = p.createdAt 
-                          ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                          : '-';
-                        const isAccepted = p.status === 'accepted';
-                        const acceptanceDate = isAccepted && p.updatedAt 
-                          ? new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                          : '-';
-                        return (
-                          <tr key={p.id}>
-                            <td className="px-4 py-3 font-extrabold text-indigo-700">
-                              {p.isPlanUpgradeRequest ? (
-                                <span className="flex items-center gap-1.5 text-indigo-700">
-                                  <Sparkles size={13} className="text-amber-500" /> User Plan Upgrade
-                                </span>
-                              ) : (
-                                <span className="flex items-center gap-1.5 text-slate-800 font-bold">
-                                  <Shield size={13} className="text-indigo-600" /> Monthly Subscription ({selectedUserPlanConfig.name})
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 font-bold text-slate-800">
-                              {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
-                            </td>
-                            <td className="px-4 py-3 font-black text-slate-900">₹{p.amount}</td>
-                            <td className="px-4 py-3 font-bold text-slate-700">
-                              {submissionDate}
-                            </td>
-                            <td className="px-4 py-3 font-bold text-emerald-700">
-                              {acceptanceDate}
-                            </td>
-                            <td className="px-4 py-3 text-slate-600">{p.paymentDetails || 'N/A'}</td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                                p.status === 'pending' ? 'bg-amber-100 text-amber-800' :
-                                p.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' :
-                                'bg-rose-100 text-rose-800'
-                              }`}>
-                                {p.status}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-slate-500">{p.adminRemarks || '-'}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                {/* Registered Coachings */}
+                <div className="space-y-3">
+                  <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                    <Building2 size={16} className="text-indigo-600" /> Registered Coachings/Tuitions ({userCoachings.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm whitespace-nowrap">
+                      <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
+                        <tr>
+                          <th className="px-4 py-3 font-bold">Coaching Center Name</th>
+                          <th className="px-4 py-3 font-bold">Owner Name</th>
+                          <th className="px-4 py-3 font-bold">Address</th>
+                          <th className="px-4 py-3 font-bold">Date Created</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                        {userCoachings.map(c => {
+                          const createdDate = c.createdAt 
+                            ? new Date(c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : 'N/A';
+                          return (
+                            <tr key={c.id}>
+                              <td className="px-4 py-3 font-bold text-slate-800">{c.name || c.coachingName || 'N/A'}</td>
+                              <td className="px-4 py-3 text-slate-600">{c.ownerName || c.teacherName || 'N/A'}</td>
+                              <td className="px-4 py-3 text-slate-500">{c.address || 'N/A'}</td>
+                              <td className="px-4 py-3 font-bold text-indigo-700 flex items-center gap-1.5">
+                                <Calendar size={13} className="text-indigo-500 shrink-0" />
+                                {createdDate}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
 
-                  {sortedUserPayments.length === 0 && (
-                    <div className="p-6 text-center text-slate-400 text-xs font-medium">
-                      No payment submissions found.
+                    {userCoachings.length === 0 && (
+                      <div className="p-6 text-center text-slate-400 text-xs font-medium">
+                        No coachings found for this user.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* User Subscription Payment Submissions History */}
+                <div className="space-y-3 pt-4 border-t border-slate-100">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                      <CreditCard size={16} className="text-indigo-600" /> Account Payment Submissions ({userPayments.length})
+                    </h3>
+                    
+                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
+                      <ArrowUpDown size={13} className="text-slate-400" />
+                      <label className="font-bold text-slate-500">Sort Month/Year:</label>
+                      <select
+                        value={paymentSortOrder}
+                        onChange={(e) => setPaymentSortOrder(e.target.value)}
+                        className="bg-transparent border-none font-bold text-slate-800 outline-none cursor-pointer"
+                      >
+                        <option value="latest">Latest Month/Year First</option>
+                        <option value="oldest">Oldest Month/Year First</option>
+                      </select>
                     </div>
-                  )}
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm whitespace-nowrap">
+                      <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
+                        <tr>
+                          <th className="px-4 py-3 font-bold">Type of Payment</th>
+                          <th className="px-4 py-3 font-bold">Month/Year</th>
+                          <th className="px-4 py-3 font-bold">Amount</th>
+                          <th className="px-4 py-3 font-bold">Date of Payment</th>
+                          <th className="px-4 py-3 font-bold">Date of Acceptance</th>
+                          <th className="px-4 py-3 font-bold">Details</th>
+                          <th className="px-4 py-3 font-bold">Status</th>
+                          <th className="px-4 py-3 font-bold">Admin Remarks</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                        {sortedUserPayments.map(p => {
+                          const submissionDate = p.createdAt 
+                            ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : '-';
+                          const isAccepted = p.status === 'accepted';
+                          const acceptanceDate = isAccepted && p.updatedAt 
+                            ? new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : '-';
+                          return (
+                            <tr key={p.id}>
+                              <td className="px-4 py-3 font-extrabold text-indigo-700">
+                                {p.isPlanUpgradeRequest ? (
+                                  <span className="flex items-center gap-1.5 text-indigo-700">
+                                    <Sparkles size={13} className="text-amber-500" /> User Plan Upgrade
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-1.5 text-slate-800 font-bold">
+                                    <Shield size={13} className="text-indigo-600" /> Monthly Subscription ({selectedUserPlanConfig.name})
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 font-bold text-slate-800">
+                                {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
+                              </td>
+                              <td className="px-4 py-3 font-black text-slate-900">₹{p.amount}</td>
+                              <td className="px-4 py-3 font-bold text-slate-700">
+                                {submissionDate}
+                              </td>
+                              <td className="px-4 py-3 font-bold text-emerald-700">
+                                {acceptanceDate}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600">{p.paymentDetails || 'N/A'}</td>
+                              <td className="px-4 py-3">
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                                  p.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                                  p.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' :
+                                  'bg-rose-100 text-rose-800'
+                                }`}>
+                                  {p.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-slate-500">{p.adminRemarks || '-'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+
+                    {sortedUserPayments.length === 0 && (
+                      <div className="p-6 text-center text-slate-400 text-xs font-medium">
+                        No payment submissions found.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
-      </main>
+          )}
+        </main>
+      )}
+      
 
       {/* Delete Confirmation Modal */}
       {showDeleteUserModal && (
