@@ -246,9 +246,11 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
 
   // Sort payments according to Billing Month/Year
   const sortedUserPayments = [...userPayments].sort((a, b) => {
-    const periodValueA = (Number(a.year) || 0) * 12 + (Number(a.month) || 0);
-    const periodValueB = (Number(b.year) || 0) * 12 + (Number(b.month) || 0);
-    return paymentSortOrder === 'latest' ? periodValueB - periodValueA : periodValueA - periodValueB;
+  // Convert date string/timestamp to milliseconds
+    const timeA = new Date(a.paymentDate || a.createdAt).getTime() || 0;
+    const timeB = new Date(b.paymentDate || b.createdAt).getTime() || 0;
+
+    return paymentSortOrder === 'latest' ? timeB - timeA : timeA - timeB;
   });
 
   if (viewingRequests) {

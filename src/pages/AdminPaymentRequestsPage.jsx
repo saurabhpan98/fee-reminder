@@ -69,8 +69,8 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
         updatedAt: nowISO
       });
 
-      // If this was a user account plan upgrade request and accepted, activate target plan and set notification
-      if (isAccept && payment.isPlanUpgradeRequest && payment.userId) {
+      // If this was a user account plan upgrade or downgrade request and accepted, activate target plan and set notification
+      if (isAccept && (payment.isPlanUpgradeRequest || payment.isPlanDowngradeRequest) && payment.userId) {
         const targetPlanId = payment.targetPlan || PLANS.PRO;
         const targetPlanConfig = PLAN_CONFIG[targetPlanId];
         const userRef = doc(db, 'users', payment.userId);
@@ -93,6 +93,11 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
             message: `Plan upgrade request accepted for ${userName}`,
             isError: false
           });
+        } else if (payment.isPlanDowngradeRequest) {
+          setToastInfo({
+            message: `Plan downgrade request accepted for ${userName}`,
+            isError: false
+          });
         } else {
           setToastInfo({
             message: `Payment request accepted for ${userName}`,
@@ -103,6 +108,11 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
         if (payment.isPlanUpgradeRequest) {
           setToastInfo({
             message: `Plan upgrade request rejected for ${userName}`,
+            isError: true
+          });
+        } else if (payment.isPlanDowngradeRequest) {
+          setToastInfo({
+            message: `Plan downgrade request rejected for ${userName}`,
             isError: true
           });
         } else {

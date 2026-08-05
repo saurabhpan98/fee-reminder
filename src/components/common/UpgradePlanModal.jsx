@@ -104,7 +104,7 @@ export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData }) => 
 
     // Upgrade Request Flow
     if (existingUpgradeRequest) {
-      setToastInfo({ message: 'already submitted.' });
+      setToastInfo({ message: 'Upgrade request already submitted.' });
       return;
     }
 
