@@ -4,7 +4,7 @@ import {
   BookOpen, CheckCircle, Shield, Sparkles, MessageSquare, 
   CreditCard, ArrowRight, Menu, X, Users, Zap, Award, 
   ChevronRight, Mail, Phone, MapPin, Send, Lock, Bell,
-  Star, ChevronLeft, Quote
+  Star, ChevronLeft, Quote, HelpCircle, ChevronDown
 } from 'lucide-react';
 
 const REVIEWS = [
@@ -46,6 +46,39 @@ const REVIEWS = [
   }
 ];
 
+const FAQS = [
+  {
+    id: 1,
+    question: 'How does TuitionManager help track student fee payments?',
+    answer: 'TuitionManager provides a real-time digital fee ledger where you can record cash, UPI, or online payments per subject or batch. It calculates remaining balance dues automatically and allows you to generate official single-month or date-range PDF receipts instantly.'
+  },
+  {
+    id: 2,
+    question: 'How do WhatsApp Fee Reminders work?',
+    answer: 'With 1-click WhatsApp integration, you can trigger a pre-formatted fee payload message directly to parents or students. The payload includes detailed tuition fee breakdowns, amount paid, balance left, and billing month information.'
+  },
+  {
+    id: 3,
+    question: 'Can I manage multiple coaching branches under one account?',
+    answer: 'Yes! Pro Plan users can manage up to 5 coaching institutes or branches under a single educator login, while custom enterprise accounts can support unlimited branches and staff accounts.'
+  },
+  {
+    id: 4,
+    question: 'What happens when a student is enrolled in multiple subjects or has siblings?',
+    answer: 'Our smart phone-number matching automatically groups sibling registrations or multi-subject enrollments together. You can track each subject batch individually without creating duplicate student records.'
+  },
+  {
+    id: 5,
+    question: 'How does the Admin Payment Verification work?',
+    answer: 'When teachers submit subscription fee payments, system administrators receive real-time notifications to review, verify transaction details, and accept or reject submissions with historical remarks threads.'
+  },
+  {
+    id: 6,
+    question: 'Is my student and payment data secure?',
+    answer: 'Absolutely. All sensitive account communications and direct administrator messages are protected with end-to-end AES encryption, and your database is hosted on secure cloud infrastructure.'
+  }
+];
+
 export const LandingPage = ({ onGetStarted, onLogin }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -55,6 +88,9 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
   // Reviews Carousel State
   const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+
+  // FAQ Active State
+  const [openFaqId, setOpenFaqId] = useState(1);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -85,6 +121,10 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
   const handleNextReview = () => {
     setIsAutoPlaying(false);
     setCurrentReviewIndex((prevIndex) => (prevIndex + 1) % REVIEWS.length);
+  };
+
+  const toggleFaq = (id) => {
+    setOpenFaqId(openFaqId === id ? null : id);
   };
 
   const handleContactSubmit = (e) => {
@@ -119,6 +159,7 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
             <a href="#features" className="hover:text-indigo-600 transition-colors">Features</a>
             <a href="#pricing" className="hover:text-indigo-600 transition-colors">Pricing</a>
             <a href="#reviews" className="hover:text-indigo-600 transition-colors">Reviews</a>
+            <a href="#faq" className="hover:text-indigo-600 transition-colors">FAQ</a>
             <a href="#contact" className="hover:text-indigo-600 transition-colors">Contact Us</a>
           </nav>
 
@@ -177,6 +218,13 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
               className="block font-semibold text-slate-700 hover:text-indigo-600"
             >
               Reviews
+            </a>
+            <a 
+              href="#faq" 
+              onClick={() => setMobileMenuOpen(false)}
+              className="block font-semibold text-slate-700 hover:text-indigo-600"
+            >
+              FAQ
             </a>
             <a 
               href="#contact" 
@@ -409,7 +457,7 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
               <div className="w-12 h-12 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center font-bold">
                 <BookOpen size={22} />
               </div>
-              <h3 className="text-lg font-extrabold text-slate-900">PDF & CSV Reports</h3>
+              <h3 className="text-lg font-extrabold text-slate-900">PDF Reports</h3>
               <p className="text-slate-600 text-xs font-medium leading-relaxed">
                 Download formal fee payment receipts or export coaching-wide summary spreadsheets in CSV and PDF formats instantly.
               </p>
@@ -432,7 +480,7 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
             <div className="p-8 bg-slate-50 rounded-3xl border border-slate-200 flex flex-col justify-between space-y-6">
               <div className="space-y-4">
                 <h3 className="font-extrabold text-lg text-slate-900">Starter Teacher</h3>
-                <p className="text-xs text-slate-500 font-medium">Ideal for independent home tutors and small batches.</p>
+                <p className="text-xs text-slate-500 font-medium">Ideal for independent home tutors and small batches. Start now & upgrade later.</p>
                 <div className="text-3xl font-black text-slate-900">Free <span className="text-xs text-slate-400 font-normal">/ forever</span></div>
                 <ul className="space-y-2.5 text-xs text-slate-600 pt-2 font-medium">
                   <li className="flex items-center gap-2"><CheckCircle size={14} className="text-indigo-600" /> Up to 50 Active Students</li>
@@ -462,7 +510,7 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
                   <li className="flex items-center gap-2"><CheckCircle size={14} className="text-indigo-400" /> Unlimited Enrolled Students</li>
                   <li className="flex items-center gap-2"><CheckCircle size={14} className="text-indigo-400" /> Up to 5 Coaching Centers</li>
                   <li className="flex items-center gap-2"><CheckCircle size={14} className="text-indigo-400" /> Direct Admin Payment Verification</li>
-                  <li className="flex items-center gap-2"><CheckCircle size={14} className="text-indigo-400" /> Range Date PDF & CSV Exports</li>
+                  <li className="flex items-center gap-2"><CheckCircle size={14} className="text-indigo-400" /> Range Date PDF Receipts</li>
                   <li className="flex items-center gap-2"><CheckCircle size={14} className="text-indigo-400" /> Encrypted Chat & WhatsApp Payload</li>
                 </ul>
               </div>
@@ -470,7 +518,7 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
                 onClick={onGetStarted}
                 className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-500/30 transition-all"
               >
-                Start Pro Trial
+                Start Pro Academy
               </button>
             </div>
 
@@ -478,7 +526,7 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
             <div className="p-8 bg-slate-50 rounded-3xl border border-slate-200 flex flex-col justify-between space-y-6">
               <div className="space-y-4">
                 <h3 className="font-extrabold text-lg text-slate-900">Custom Network</h3>
-                <p className="text-xs text-slate-500 font-medium">For large multi-branch educational networks.</p>
+                <p className="text-xs text-slate-500 font-medium">Yet to launch.For large multi-branch educational networks.</p>
                 <div className="text-3xl font-black text-slate-900">Custom</div>
                 <ul className="space-y-2.5 text-xs text-slate-600 pt-2 font-medium">
                   <li className="flex items-center gap-2"><CheckCircle size={14} className="text-indigo-600" /> Unlimited Centers & Staff</li>
@@ -576,6 +624,75 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ (Frequently Asked Questions) Section */}
+      <section id="faq" className="py-20 bg-white border-b border-slate-100">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+          <div className="text-center space-y-3 max-w-3xl mx-auto">
+            <span className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider flex items-center justify-center gap-1.5">
+              <HelpCircle size={15} /> Got Questions?
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">Frequently Asked Questions</h2>
+            <p className="text-slate-600 text-sm font-medium">Everything you need to know about setting up and automating your coaching institute fees.</p>
+          </div>
+
+          <div className="space-y-4">
+            {FAQS.map((faq) => {
+              const isOpen = openFaqId === faq.id;
+              return (
+                <div 
+                  key={faq.id}
+                  className={`rounded-3xl border transition-all duration-300 overflow-hidden ${
+                    isOpen 
+                      ? 'bg-gradient-to-r from-indigo-50/40 via-white to-slate-50/50 border-indigo-200 shadow-md' 
+                      : 'bg-slate-50/60 border-slate-200/80 hover:border-slate-300 hover:bg-white'
+                  }`}
+                >
+                  <button
+                    onClick={() => toggleFaq(faq.id)}
+                    className="w-full p-6 text-left flex items-center justify-between gap-4 cursor-pointer focus:outline-none"
+                  >
+                    <span className={`font-extrabold text-sm sm:text-base transition-colors ${isOpen ? 'text-indigo-600' : 'text-slate-900'}`}>
+                      {faq.question}
+                    </span>
+                    <div className={`p-2 rounded-2xl transition-all duration-300 shrink-0 ${
+                      isOpen ? 'bg-indigo-600 text-white rotate-180 shadow-md shadow-indigo-200' : 'bg-white text-slate-500 border border-slate-200'
+                    }`}>
+                      <ChevronDown size={18} />
+                    </div>
+                  </button>
+
+                  <div 
+                    className={`grid transition-all duration-300 ease-in-out ${
+                      isOpen ? 'grid-rows-[1fr] opacity-100 pb-6 px-6' : 'grid-rows-[0fr] opacity-0 pb-0 px-6'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed border-t border-slate-100 pt-4">
+                        {faq.answer}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Bottom FAQ Help Box */}
+          <div className="p-6 bg-slate-900 rounded-3xl text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+            <div className="space-y-1 text-center sm:text-left">
+              <h4 className="font-extrabold text-base">Have more questions?</h4>
+              <p className="text-xs text-slate-400 font-medium">Our team is available 24/7 to assist with your coaching setup.</p>
+            </div>
+            <a 
+              href="#contact" 
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-500/30 transition-all hover:scale-105 shrink-0"
+            >
+              Ask Support Team
+            </a>
           </div>
         </div>
       </section>
@@ -696,6 +813,7 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
               <a href="#features" className="hover:text-white transition-colors">Features</a>
               <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
               <a href="#reviews" className="hover:text-white transition-colors">Reviews</a>
+              <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
               <a href="#contact" className="hover:text-white transition-colors">Contact</a>
             </div>
 
