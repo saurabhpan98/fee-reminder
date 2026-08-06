@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, addDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { Sparkles, CheckCircle2, X, AlertCircle, Send, ArrowDownCircle, CreditCard } from 'lucide-react';
-import { PLANS, PLAN_CONFIG } from '../../utils/planUtils';
+import { PLANS, PLAN_CONFIG, getUserPlanConfig } from '../../utils/planUtils';
 
 export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData }) => {
   const isCurrentPro = userData?.plan === PLANS.PRO;
@@ -13,6 +13,9 @@ export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData }) => 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingRequests, setPayments] = useState([]);
   const [toastInfo, setToastInfo] = useState(null);
+
+  const currentPlan = getUserPlanConfig(userData);
+  const isStarter = currentPlan.id === PLANS.STARTER;
 
   useEffect(() => {
     if (isCurrentPro) {
@@ -61,6 +64,10 @@ export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData }) => 
     const nowISO = new Date().toISOString();
 
     if (isDowngradeMode) {
+      if(currentPlan.id === PLANS.STARTER){
+        setToastInfo({ message: 'You are already on the Starter Free Plan.' });
+        return;
+      }
       if (existingDowngradeRequest) {
         setToastInfo({ message: 'Downgrade request already submitted and pending admin approval.' });
         return;
@@ -90,10 +97,10 @@ export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData }) => 
           userRead: true,
           createdAt: nowISO
         });
-
         setIsSubmitting(false);
         setUserRemarks('');
         onClose();
+        
       } catch (err) {
         console.error('Error submitting downgrade request:', err);
         setToastInfo({ message: 'Failed to submit downgrade request: ' + err.message });
@@ -103,6 +110,11 @@ export const UpgradePlanModal = ({ isOpen, onClose, currentUser, userData }) => 
     }
 
     // Upgrade Request Flow
+    if(currentPlan.id === PLANS.PRO){
+      setToastInfo({ message: 'You are already on the Pro Plan.' });
+      return;
+    }
+    
     if (existingUpgradeRequest) {
       setToastInfo({ message: 'Upgrade request already submitted.' });
       return;
