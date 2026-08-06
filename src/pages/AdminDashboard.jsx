@@ -246,7 +246,6 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
 
   // Sort payments according to Billing Month/Year
   const sortedUserPayments = [...userPayments].sort((a, b) => {
-  // Convert date string/timestamp to milliseconds
     const timeA = new Date(a.paymentDate || a.createdAt).getTime() || 0;
     const timeB = new Date(b.paymentDate || b.createdAt).getTime() || 0;
 
@@ -416,14 +415,86 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
           ) : (
             <div>{ selectedUser.status === 'deleted' ? (
             /* Deleted User Profile Sub-Page */
-            <div className="space-y-6">
+            <div className="space-y-6 animate-in fade-in duration-300">
               <button
                 onClick={() => setSelectedUser(null)}
                 className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-xs"
               >
                 <ArrowLeft size={16} /> Back to Users List
               </button>
-              Account deleted
+
+              <div className="bg-white rounded-3xl border border-slate-200/70 p-6 sm:p-8 shadow-xs space-y-6">
+                {/* Header Section */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 font-extrabold text-2xl flex items-center justify-center shrink-0">
+                      {(selectedUser?.name || selectedUser?.email || 'U').charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                          {selectedUser.name || 'Unnamed User'}
+                        </h2>
+                        <span className="px-3 py-1 bg-rose-50 text-rose-600 border border-rose-200 rounded-full text-[10px] font-extrabold uppercase">
+                          Deleted
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1 font-medium">{selectedUser.email}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Callout Banner */}
+                <div className="p-4 rounded-2xl bg-rose-50/80 border border-rose-200 text-xs text-rose-900 flex items-start gap-3">
+                  <div className="p-2 bg-rose-100 rounded-xl text-rose-600 shrink-0 mt-0.5">
+                    <AlertOctagon size={18} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="font-extrabold text-sm text-rose-900">Account Terminated & Data Purged</p>
+                    <p className="text-rose-700/90 leading-relaxed font-medium">
+                      This user account has been permanently deleted by the administrator. User login access is disabled, and all associated coaching centers, subject batches, and student rosters have been purged.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Basic Details Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Users size={13} className="text-indigo-600" /> Full Name
+                    </p>
+                    <p className="text-sm font-extrabold text-slate-800">{selectedUser?.name || 'N/A'}</p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Shield size={13} className="text-indigo-600" /> Email Address
+                    </p>
+                    <p className="text-sm font-extrabold text-slate-800">{selectedUser?.email || 'N/A'}</p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <AlertCircle size={13} className="text-rose-600" /> Account Status
+                    </p>
+                    <p className="text-sm font-extrabold text-rose-600 uppercase">{selectedUser?.status || 'Deleted'}</p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles size={13} className="text-indigo-600" /> Last Active Plan
+                    </p>
+                    <p className="text-sm font-extrabold text-slate-800 uppercase">{selectedUser?.plan || 'Starter'}</p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1 sm:col-span-2 lg:col-span-2">
+                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Calendar size={13} className="text-indigo-600" /> Account User ID
+                    </p>
+                    <p className="text-xs font-mono font-bold text-slate-700 select-all">{selectedUser?.uid || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
             </div>
              ) : (
             /* User Profile Sub-Page */
