@@ -457,7 +457,7 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
               <div className="space-y-4">
                 <h3 className="font-extrabold text-lg">Pro Academy</h3>
                 <p className="text-xs text-slate-400 font-medium">For growing coaching institutes and multi-subject staff.</p>
-                <div className="text-3xl font-black">₹ 799 <span className="text-xs text-slate-400 font-normal">/ month</span></div>
+                <div className="text-3xl font-black">₹ 1200 <span className="text-xs text-slate-400 font-normal">/ month</span></div>
                 <ul className="space-y-2.5 text-xs text-slate-300 pt-2 font-medium">
                   <li className="flex items-center gap-2"><CheckCircle size={14} className="text-indigo-400" /> Unlimited Enrolled Students</li>
                   <li className="flex items-center gap-2"><CheckCircle size={14} className="text-indigo-400" /> Up to 5 Coaching Centers</li>
