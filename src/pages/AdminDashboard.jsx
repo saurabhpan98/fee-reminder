@@ -414,6 +414,18 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
               </div>
             </div>
           ) : (
+            <div>{ selectedUser.status === 'deleted' ? (
+            /* Deleted User Profile Sub-Page */
+            <div className="space-y-6">
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-xs"
+              >
+                <ArrowLeft size={16} /> Back to Users List
+              </button>
+              Account deleted
+            </div>
+             ) : (
             /* User Profile Sub-Page */
             <div className="space-y-6">
               <button
@@ -633,7 +645,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                 </div>
               </div>
             </div>
-          )}
+        )}</div>)}
         </main>
       )}
       
