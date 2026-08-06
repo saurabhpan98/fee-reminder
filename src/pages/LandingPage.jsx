@@ -526,7 +526,7 @@ export const LandingPage = ({ onGetStarted, onLogin }) => {
             <div className="p-8 bg-slate-50 rounded-3xl border border-slate-200 flex flex-col justify-between space-y-6">
               <div className="space-y-4">
                 <h3 className="font-extrabold text-lg text-slate-900">Custom Network</h3>
-                <p className="text-xs text-slate-500 font-medium">Yet to launch.For large multi-branch educational networks.</p>
+                <p className="text-xs text-slate-500 font-medium">Yet to launch. For large multi-branch educational networks.</p>
                 <div className="text-3xl font-black text-slate-900">Custom</div>
                 <ul className="space-y-2.5 text-xs text-slate-600 pt-2 font-medium">
                   <li className="flex items-center gap-2"><CheckCircle size={14} className="text-indigo-600" /> Unlimited Centers & Staff</li>
