@@ -23,14 +23,16 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
 
   // Toast Notification State
   const [toastInfo, setToastInfo] = useState(null); // { message }
+  const [toastColour, setToastColour] = useState('bg-rose-600 text-rose-700'); // default red for errors
 
   const currentPlan = getUserPlanConfig(userData);
+  const isStarter = currentPlan.id === PLANS.STARTER;
 
   const [formData, setFormData] = useState({
-    paymentType: 'monthly', // 'monthly' | 'upgrade'
+    paymentType: isStarter ? 'custom' : 'monthly', // 'monthly' | 'upgrade' | 'custom'
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
-    amount: currentPlan.price,
+    amount: isStarter ? '' : currentPlan.price,
     paymentDetails: '',
     userRemarks: ''
   });
@@ -40,6 +42,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
     if (toastInfo) {
       const timer = setTimeout(() => {
         setToastInfo(null);
+        setToastColour('border-rose-700 bg-rose-600 text-white');
       }, 4000);
       return () => clearTimeout(timer);
     }
@@ -74,7 +77,15 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
 
   const handlePaymentTypeChange = (type) => {
     setToastInfo(null);
-    const targetAmount = type === 'upgrade' ? PLAN_CONFIG[PLANS.PRO].price : currentPlan.price;
+    let targetAmount = '';
+    if (type === 'upgrade') {
+      targetAmount = PLAN_CONFIG[PLANS.PRO].price;
+    } else if (type === 'monthly') {
+      targetAmount = currentPlan.price;
+    } else if (type === 'custom') {
+      targetAmount = '';
+    }
+
     setFormData(prev => ({
       ...prev,
       paymentType: type,
@@ -85,11 +96,12 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
   const handleOpenAdd = () => {
     setEditingPayment(null);
     setToastInfo(null);
+    const defaultType = isStarter ? 'custom' : 'monthly';
     setFormData({
-      paymentType: 'monthly',
+      paymentType: defaultType,
       month: new Date().getMonth() + 1,
       year: new Date().getFullYear(),
-      amount: currentPlan.price,
+      amount: defaultType === 'monthly' ? currentPlan.price : (defaultType === 'upgrade' ? PLAN_CONFIG[PLANS.PRO].price : ''),
       paymentDetails: '',
       userRemarks: ''
     });
@@ -99,9 +111,16 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
   const handleOpenEdit = (payment) => {
     setEditingPayment(payment);
     setToastInfo(null);
-    const isUpgrade = payment.isPlanUpgradeRequest;
+    
+    let pType = 'monthly';
+    if (payment.isCustomPayment) {
+      pType = 'custom';
+    } else if (payment.isPlanUpgradeRequest) {
+      pType = 'upgrade';
+    }
+
     setFormData({
-      paymentType: isUpgrade ? 'upgrade' : 'monthly',
+      paymentType: pType,
       month: payment.month,
       year: payment.year,
       amount: payment.amount,
@@ -116,19 +135,27 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
     setToastInfo(null);
 
     const isUpgrade = formData.paymentType === 'upgrade';
+    const isCustom = formData.paymentType === 'custom';
 
     // Show Red Toast Notification at bottom if already submitted
     if (isUpgrade && !editingPayment && hasExistingUpgradeRequest) {
+      setToastColour('border-rose-700 bg-rose-600 text-white');
       setToastInfo({ message: 'Request already submitted.' });
       return;
     }
 
-    if (!formData.amount || Number(formData.amount) < 0) {
+    if (!formData.amount || Number(formData.amount) <= 0) {
+      setToastColour('border-rose-700 bg-rose-600 text-white');
       setToastInfo({ message: 'Please enter a valid payment amount.' });
       return;
     }
 
-    const planName = isUpgrade ? PLAN_CONFIG[PLANS.PRO].name : currentPlan.name;
+    let coachingNameStr = `Monthly Subscription (${currentPlan.name})`;
+    if (isCustom) {
+      coachingNameStr = 'Custom Payment';
+    } else if (isUpgrade) {
+      coachingNameStr = 'User Account Plan Upgrade';
+    }
 
     try {
       const nowISO = new Date().toISOString();
@@ -144,10 +171,11 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
 
         await updateDoc(doc(db, 'payments', editingPayment.id), {
           coachingId: null,
-          coachingName: isUpgrade ? 'User Account Plan Upgrade' : `Monthly Subscription (${planName})`,
+          coachingName: coachingNameStr,
           isPlanUpgradeRequest: isUpgrade,
+          isCustomPayment: isCustom,
           targetPlan: isUpgrade ? PLANS.PRO : (userData?.plan || PLANS.STARTER),
-          planName: planName,
+          planName: isUpgrade ? PLAN_CONFIG[PLANS.PRO].name : currentPlan.name,
           month: Number(formData.month),
           year: Number(formData.year),
           amount: Number(formData.amount),
@@ -166,10 +194,11 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
           userName: userData?.name || currentUser.email,
           userEmail: currentUser.email,
           coachingId: null,
-          coachingName: isUpgrade ? 'User Account Plan Upgrade' : `Monthly Subscription (${planName})`,
+          coachingName: coachingNameStr,
           isPlanUpgradeRequest: isUpgrade,
+          isCustomPayment: isCustom,
           targetPlan: isUpgrade ? PLANS.PRO : (userData?.plan || PLANS.STARTER),
-          planName: planName,
+          planName: isUpgrade ? PLAN_CONFIG[PLANS.PRO].name : currentPlan.name,
           month: Number(formData.month),
           year: Number(formData.year),
           amount: Number(formData.amount),
@@ -185,9 +214,12 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
       }
       setShowAddModal(false);
       setEditingPayment(null);
+      setToastColour('border-green-700 bg-green-600 text-white');
+      setToastInfo({ message: "Payment request submitted successfully!" });
     } catch (err) {
       console.error("Error saving payment:", err);
-      setToastInfo({ message: "Failed to submit payment: " + err.message });
+      setToastColour('border-rose-700 bg-rose-600 text-white');
+      setToastInfo({ message: "Failed to submit payment request: " + err.message });
     }
   };
 
@@ -198,9 +230,12 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
     try {
       await deleteDoc(doc(db, 'payments', cancellingPayment.id));
       setCancellingPayment(null);
+      setToastInfo({ message: "Payment request cancelled successfully!" });
+      setToastColour('border-green-700 bg-green-600 text-white');
     } catch (err) {
       console.error("Error cancelling payment request:", err);
-      alert("Failed to cancel request: " + err.message);
+      setToastInfo({ message: "Failed to cancel request: " + err.message });
+      setToastColour('border-rose-700 bg-rose-600 text-white');
     } finally {
       setIsDeleting(false);
     }
@@ -278,7 +313,12 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                               </span>
                               <h3 className="text-xl font-black mt-0.5">₹ {p.amount}</h3>
 
-                              {p.isPlanUpgradeRequest ? (
+                              {p.isCustomPayment ? (
+                                <p className="text-[11px] font-extrabold text-amber-800 flex items-center gap-1.5 mt-1 bg-amber-100/80 px-2.5 py-1 rounded-lg w-fit">
+                                  <CreditCard size={13} className="text-amber-600 shrink-0" />
+                                  <span>Custom Payment</span>
+                                </p>
+                              ) : p.isPlanUpgradeRequest ? (
                                 <p className="text-[11px] font-extrabold text-indigo-700 flex items-center gap-1.5 mt-1 bg-indigo-100/80 px-2.5 py-1 rounded-lg w-fit">
                                   <Sparkles size={13} className="text-indigo-600 shrink-0" />
                                   <span>User Account Plan Upgrade (Pro Academy)</span>
@@ -393,7 +433,11 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                       return (
                         <tr key={p.id}>
                           <td className="px-4 py-3 font-extrabold text-indigo-700">
-                            {p.isPlanUpgradeRequest ? (
+                            {p.isCustomPayment ? (
+                              <span className="flex items-center gap-1.5 text-amber-700">
+                                <CreditCard size={13} className="text-amber-500" /> Custom Payment
+                              </span>
+                            ) : p.isPlanUpgradeRequest ? (
                               <span className="flex items-center gap-1.5 text-indigo-700">
                                 <Sparkles size={13} className="text-amber-500" /> Plan Upgrade to Pro Academy
                               </span>
@@ -449,7 +493,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
             </div>
 
             <div className="p-3.5 bg-rose-50/60 rounded-2xl border border-rose-100 text-xs text-slate-700 space-y-1">
-              <p>Type: <strong>{cancellingPayment.isPlanUpgradeRequest ? 'User Account Plan Upgrade' : 'Monthly Subscription'}</strong></p>
+              <p>Type: <strong>{cancellingPayment.isCustomPayment ? 'Custom Payment' : cancellingPayment.isPlanUpgradeRequest ? 'User Account Plan Upgrade' : 'Monthly Subscription'}</strong></p>
               <p>Amount: <strong>₹ {cancellingPayment.amount}</strong></p>
               <p>Details: <strong>{cancellingPayment.paymentDetails || 'N/A'}</strong></p>
               <p className="text-rose-600 font-bold pt-1">
@@ -496,35 +540,66 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Payment Type</label>
                 <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl text-xs font-bold">
-                  <button
-                    type="button"
-                    onClick={() => handlePaymentTypeChange('monthly')}
-                    className={`py-2 rounded-xl transition-all ${
-                      formData.paymentType === 'monthly' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'
-                    }`}
-                  >
-                    Monthly Payment
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePaymentTypeChange('upgrade')}
-                    className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
-                      formData.paymentType === 'upgrade' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500'
-                    }`}
-                  >
-                    <Sparkles size={12} /> Plan Upgrade
-                  </button>
+                  {/* STARTER PLAN USER */}
+                  {isStarter ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handlePaymentTypeChange('custom')}
+                        className={`py-2 rounded-xl transition-all ${
+                          formData.paymentType === 'custom' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'
+                        }`}
+                      >
+                        Custom Payment
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePaymentTypeChange('upgrade')}
+                        className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                          formData.paymentType === 'upgrade' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500'
+                        }`}
+                      >
+                        <Sparkles size={12} /> Plan Upgrade
+                      </button>
+                    </>
+                  ) : (
+                    /* PRO PLAN USER */
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handlePaymentTypeChange('monthly')}
+                        className={`py-2 rounded-xl transition-all ${
+                          formData.paymentType === 'monthly' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'
+                        }`}
+                      >
+                        Monthly Payment
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePaymentTypeChange('custom')}
+                        className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                          formData.paymentType === 'custom' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500'
+                        }`}
+                      >
+                        Custom Payment
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
               <div className="p-3.5 bg-slate-900 text-white rounded-2xl text-xs space-y-1">
-                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Target Account Subscription Plan:</span>
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Target Payment Mode:</span>
                 <p className="font-extrabold text-sm flex items-center gap-1.5">
                   <Shield size={14} className="text-amber-400" />
-                  {formData.paymentType === 'upgrade' ? PLAN_CONFIG[PLANS.PRO].name : currentPlan.name}
+                  {formData.paymentType === 'custom'
+                    ? 'Custom Payment (Non-Subscription)'
+                    : formData.paymentType === 'upgrade'
+                    ? PLAN_CONFIG[PLANS.PRO].name
+                    : currentPlan.name}
                 </p>
                 <p className="text-[11px] text-slate-300">
-                  Default price: {formData.paymentType === 'upgrade' ? PLAN_CONFIG[PLANS.PRO].priceLabel : currentPlan.priceLabel}
+                  Default price: {formData.paymentType === 'custom' ? 'User Defined' : formData.paymentType === 'upgrade' ? PLAN_CONFIG[PLANS.PRO].priceLabel : currentPlan.priceLabel}
                 </p>
               </div>
 
@@ -558,14 +633,17 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Amount (Auto-set by plan)</label>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  Amount {formData.paymentType !== 'custom' && '(Auto-set by plan)'}
+                </label>
                 <input
                   type="number"
                   required
                   placeholder="e.g. 1200"
+                  disabled={formData.paymentType === 'monthly' || formData.paymentType === 'upgrade'}
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-100"
                 />
               </div>
 
@@ -614,7 +692,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
       {/* Red Notification Toast at Bottom Right */}
       {toastInfo && (
         <div className="fixed bottom-6 right-6 z-[60] animate-in slide-in-from-bottom-5 fade-in duration-300">
-          <div className="px-4 py-3 rounded-2xl shadow-2xl border bg-rose-600 border-rose-700 text-white flex items-center gap-3 max-w-sm text-xs font-bold">
+          <div className={`px-4 py-3 rounded-2xl shadow-2xl ${toastColour} flex items-center gap-3 max-w-sm text-xs font-bold`}>
             <div className="p-1.5 bg-white/20 rounded-xl shrink-0">
               <AlertCircle size={18} />
             </div>
