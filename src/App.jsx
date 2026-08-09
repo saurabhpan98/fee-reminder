@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { AuthPage } from './pages/AuthPage';
 import { LandingPage } from './pages/LandingPage';
 import { AdminDashboard } from './pages/AdminDashboard';
@@ -17,9 +17,9 @@ import { ChatModal } from './components/ChatModal';
 import { UpgradePlanModal } from './components/common/UpgradePlanModal';
 import { getUserPlanConfig, PLANS } from './utils/planUtils';
 import { 
-  LogOut, BookOpen, User, ChevronRight, 
-  Home, ArrowLeft, MessageSquare, ShieldAlert, 
-  Bell, CreditCard, MoreVertical, Shield, Calendar, Mail, Sparkles, CheckCircle2, Lock
+   LogOut, BookOpen, User, ChevronRight, 
+   Home, ArrowLeft, MessageSquare, ShieldAlert, 
+   Bell, CreditCard, MoreVertical, Shield, Calendar, Mail, Sparkles, CheckCircle2, Lock 
 } from 'lucide-react';
 import './App.css';
 
@@ -84,7 +84,6 @@ const UserProfileView = ({ userData, currentUser, onBack, onOpenUpgradeModal }) 
                 <Sparkles size={18} className="text-amber-400" /> {planConfig.name}
               </h2>
             </div>
-
             <button
               onClick={onOpenUpgradeModal}
               className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-indigo-500/30 transition-all hover:scale-105"
@@ -163,7 +162,7 @@ export default function App() {
   const [userData, setUserData] = useState(null);
   const [userCoachings, setUserCoachings] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Landing / Auth View Toggle State
   const [showAuthScreen, setShowAuthScreen] = useState(false);
 
@@ -176,7 +175,7 @@ export default function App() {
   const [unreadPayments, setUnreadPayments] = useState([]);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [showMenuDropdown, setShowMenuDropdown] = useState(false);
-  
+
   const notifRef = useRef(null);
   const menuRef = useRef(null);
 
@@ -216,9 +215,42 @@ export default function App() {
         }
 
         if (user.email !== ADMIN_EMAIL) {
-          unsubProfile = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
+          unsubProfile = onSnapshot(doc(db, 'users', user.uid), async (docSnap) => {
             if (docSnap.exists()) {
-              setUserData({ uid: docSnap.id, ...docSnap.data() });
+              const uData = { uid: docSnap.id, ...docSnap.data() };
+              
+              // AUTO-PAUSE LOGIC FOR PRO PLAN NON-PAYMENT AFTER 7TH OF CURRENT MONTH
+              const now = new Date();
+              const currentDay = now.getDate();
+              const currentMonth = now.getMonth() + 1;
+              const currentYear = now.getFullYear();
+
+              if (uData.plan === PLANS.PRO) {
+                // Fetch accepted payment for Pro plan for the current month/year
+                const paymentsRef = collection(db, 'payments');
+                const pQuery = query(
+                  paymentsRef,
+                  where('userId', '==', user.uid),
+                  where('status', '==', 'accepted'),
+                  where('month', '==', currentMonth),
+                  where('year', '==', currentYear)
+                );
+                const pSnap = await getDocs(pQuery);
+                const hasPaidCurrentMonth = !pSnap.empty;
+
+                if (currentDay > 7 && !hasPaidCurrentMonth) {
+                  if (uData.status !== 'stopped') {
+                    await updateDoc(doc(db, 'users', user.uid), { status: 'stopped' });
+                    uData.status = 'stopped';
+                  }
+                } else if (hasPaidCurrentMonth && uData.status === 'stopped') {
+                  // Auto-unpause if payment is accepted
+                  await updateDoc(doc(db, 'users', user.uid), { status: 'active' });
+                  uData.status = 'active';
+                }
+              }
+
+              setUserData(uData);
             }
           });
 
@@ -297,14 +329,12 @@ export default function App() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500 font-medium text-sm">
-        
-          <svg className="pl" width={240} height={240} viewBox="0 0 240 240">
-            <circle className="pl__ring pl__ring--a" cx={120} cy={120} r={105} fill="none" stroke="#000" strokeWidth={20} strokeDasharray="0 660" strokeDashoffset={-330} strokeLinecap="round" />
-            <circle className="pl__ring pl__ring--b" cx={120} cy={120} r={35} fill="none" stroke="#000" strokeWidth={20} strokeDasharray="0 220" strokeDashoffset={-110} strokeLinecap="round" />
-            <circle className="pl__ring pl__ring--c" cx={85} cy={120} r={70} fill="none" stroke="#000" strokeWidth={20} strokeDasharray="0 440" strokeLinecap="round" />
-            <circle className="pl__ring pl__ring--d" cx={155} cy={120} r={70} fill="none" stroke="#000" strokeWidth={20} strokeDasharray="0 440" strokeLinecap="round" />
-          </svg>
-        
+        <svg className="pl" width={240} height={240} viewBox="0 0 240 240">
+          <circle className="pl__ring pl__ring--a" cx={120} cy={120} r={105} fill="none" stroke="#000" strokeWidth={20} strokeDasharray="0 660" strokeDashoffset={-330} strokeLinecap="round" />
+          <circle className="pl__ring pl__ring--b" cx={120} cy={120} r={35} fill="none" stroke="#000" strokeWidth={20} strokeDasharray="0 220" strokeDashoffset={-110} strokeLinecap="round" />
+          <circle className="pl__ring pl__ring--c" cx={85} cy={120} r={70} fill="none" stroke="#000" strokeWidth={20} strokeDasharray="0 440" strokeLinecap="round" />
+          <circle className="pl__ring pl__ring--d" cx={155} cy={120} r={70} fill="none" stroke="#000" strokeWidth={20} strokeDasharray="0 440" strokeLinecap="round" />
+        </svg>
       </div>
     );
   }
@@ -369,6 +399,9 @@ export default function App() {
   // Total Unclicked Notification Count
   const totalNotifCount = (unreadMsgCount > 0 ? 1 : 0) + unreadPayments.length;
   const planConfig = getUserPlanConfig(userData);
+
+  const isAccountPaused = userData?.status === 'stopped';
+  const isAccessibleTab = currentNav.screen === 'payments' || currentNav.screen === 'profile';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased">
@@ -527,10 +560,10 @@ export default function App() {
       </header>
 
       {/* Account Paused Banner */}
-      {userData?.status === 'stopped' && (
+      {isAccountPaused && (
         <div className="bg-amber-500 text-white p-2.5 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-sm">
           <ShieldAlert size={16} />
-          <span>Your account is paused by the administrator. Work actions inside coachings are disabled, but messaging with admin is active.</span>
+          <span>Your account has been paused due to non-payment. Please pay to activate your account. You can still access Payments Portal, Profile, and Chat with Admin.</span>
         </div>
       )}
 
@@ -546,12 +579,14 @@ export default function App() {
                 <ArrowLeft size={14} /> Back
               </button>
             )}
+
             <button 
               onClick={() => setNavigationHistory([{ screen: 'dashboard', state: {} }])}
               className="flex items-center gap-1 hover:text-indigo-600 transition-colors"
             >
               <Home size={14} /> Dashboard
             </button>
+
             {selectedCoaching && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
@@ -560,36 +595,42 @@ export default function App() {
                 </span>
               </>
             )}
+
             {currentNav.screen === 'classDetails' && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
                 <span className="text-indigo-600 font-bold">Class Details</span>
               </>
             )}
+
             {currentNav.screen === 'subjectDetails' && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
                 <span className="text-indigo-600 font-bold">Subject Details</span>
               </>
             )}
+
             {currentNav.screen === 'addStudent' && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
                 <span className="text-indigo-600 font-bold">Add Student</span>
               </>
             )}
+
             {currentNav.screen === 'studentDetails' && selectedStudent && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
                 <span className="text-indigo-600 font-bold">{selectedStudent.name}</span>
               </>
             )}
+
             {currentNav.screen === 'payments' && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
                 <span className="text-indigo-600 font-bold">Payments</span>
               </>
             )}
+
             {currentNav.screen === 'profile' && (
               <>
                 <ChevronRight size={12} className="text-slate-300" />
@@ -600,7 +641,7 @@ export default function App() {
         </div>
       </div>
 
-      <main className={`p-6 ${userData?.status === 'stopped' ? 'pointer-events-none opacity-50 select-none' : ''}`}>
+      <main className={`p-6 ${isAccountPaused && !isAccessibleTab ? 'pointer-events-none opacity-50 select-none' : ''}`}>
         {currentNav.screen === 'dashboard' && (
           <TeacherDashboard 
             userId={currentUser.uid} 
@@ -613,9 +654,10 @@ export default function App() {
                 selectedSubjectId: '', 
                 activeTab: 'roster' 
               });
-            }} 
+            }}
           />
         )}
+
         {currentNav.screen === 'coaching' && selectedCoaching && (
           <CoachingView 
             coaching={selectedCoaching} 
@@ -630,6 +672,7 @@ export default function App() {
             onGoBack={goBack}
           />
         )}
+
         {currentNav.screen === 'classDetails' && selectedCoaching && (
           <ClassDetailsPage
             coachingId={selectedCoaching.id}
@@ -639,6 +682,7 @@ export default function App() {
             onOpenSubjectDetails={({ classId, subjectId }) => navigateTo('subjectDetails', { coaching: selectedCoaching, classId, subjectId })}
           />
         )}
+
         {currentNav.screen === 'subjectDetails' && selectedCoaching && (
           <SubjectDetailsPage
             coachingId={selectedCoaching.id}
@@ -649,6 +693,7 @@ export default function App() {
             onOpenClassDetails={(classId) => navigateTo('classDetails', { coaching: selectedCoaching, classId })}
           />
         )}
+
         {currentNav.screen === 'addStudent' && selectedCoaching && (
           <AddStudentPage 
             coachingId={selectedCoaching.id}
@@ -660,6 +705,7 @@ export default function App() {
             onGoBack={goBack}
           />
         )}
+
         {currentNav.screen === 'studentDetails' && selectedStudent && (
           <StudentDetailsPage 
             studentId={selectedStudent.id} 
@@ -668,6 +714,7 @@ export default function App() {
             onBack={goBack} 
           />
         )}
+
         {currentNav.screen === 'payments' && (
           <UserPaymentsPage
             currentUser={currentUser}
@@ -675,6 +722,7 @@ export default function App() {
             onBack={goBack}
           />
         )}
+
         {currentNav.screen === 'profile' && (
           <UserProfileView
             userData={userData}

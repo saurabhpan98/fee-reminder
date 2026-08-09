@@ -441,6 +441,10 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                               <span className="flex items-center gap-1.5 text-indigo-700">
                                 <Sparkles size={13} className="text-amber-500" /> Plan Upgrade to Pro Academy
                               </span>
+                            ) : p.isPlanDowngradeRequest ? (
+                              <span className="flex items-center gap-1.5 text-indigo-700">
+                                <Sparkles size={13} className="text-amber-500" /> Plan Downgrade to {p.planName}
+                              </span>
                             ) : (
                               <span className="flex items-center gap-1.5 text-slate-700">
                                 <Shield size={13} className="text-indigo-600" /> Monthly Payment (Current Plan: {p.planName || currentPlan.name})

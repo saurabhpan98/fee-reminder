@@ -672,7 +672,15 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                               <td className="px-4 py-3 font-extrabold text-indigo-700">
                                 {p.isPlanUpgradeRequest ? (
                                   <span className="flex items-center gap-1.5 text-indigo-700">
-                                    <Sparkles size={13} className="text-amber-500" /> User Plan Upgrade
+                                    <Sparkles size={13} className="text-amber-500" /> User Plan Upgrade ({p.planName})
+                                  </span>
+                                ) : p.isPlanDowngradeRequest ? (
+                                  <span className="flex items-center gap-1.5 text-indigo-700">
+                                    <Sparkles size={13} className="text-amber-500" /> User Plan Downgrade ({p.planName})
+                                  </span>
+                                ) : p.isCustomPlan ? (
+                                  <span className="flex items-center gap-1.5 text-slate-800 font-bold">
+                                    <Shield size={13} className="text-indigo-600" /> Custom Plan
                                   </span>
                                 ) : (
                                   <span className="flex items-center gap-1.5 text-slate-800 font-bold">
