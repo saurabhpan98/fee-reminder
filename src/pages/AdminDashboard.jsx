@@ -644,7 +644,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto overflow-x-auto max-h-[220px] overflow-y-auto">
                     <table className="w-full text-left text-sm whitespace-nowrap">
                       <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
                         <tr>
