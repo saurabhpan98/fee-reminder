@@ -37,6 +37,9 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const [showDeletePaymentModal, setShowDeletePaymentModal] = useState({ show: false, paymentId: null });
+  const [isProcessingPaymentDelete, setIsProcessingPaymentDelete] = useState(false);
+
   // Green Toast Notification State
   const [toastInfo, setToastInfo] = useState(null);
 
@@ -251,6 +254,27 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
 
     return paymentSortOrder === 'latest' ? timeB - timeA : timeA - timeB;
   });
+
+  const handleDeletePayment = async (paymentId) => {
+    try {
+      await deleteDoc(doc(db, 'payments', paymentId));
+      setUserPayments(prev => prev.filter(p => p.id !== paymentId));
+      setShowDeletePaymentModal({ show: false, paymentId: null });
+      setIsProcessingPaymentDelete(false);
+      setToastInfo({
+        message: 'Payment deleted successfully.',
+        isError: false
+      });
+    } catch (err) {
+      console.error("Error deleting payment submission:", err);
+      setIsProcessingPaymentDelete(false);
+      setShowDeletePaymentModal({ show: false, paymentId: null });
+      setToastInfo({
+        message: `Failed to update user plan: ${err.message}`,
+        isError: true
+      });
+    }
+  };
 
   const selectedUserPlanConfig = PLAN_CONFIG[selectedUser?.plan || PLANS.STARTER];
 
@@ -656,6 +680,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                           <th className="px-4 py-3 font-bold">Details</th>
                           <th className="px-4 py-3 font-bold">Status</th>
                           <th className="px-4 py-3 font-bold">Admin Remarks</th>
+                          <th className="px-4 py-3 font-bold">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-xs font-medium">
@@ -709,6 +734,14 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-slate-500">{p.adminRemarks || '-'}</td>
+                              <td className="px-4 py-3">
+                                <button
+                                  onClick={() => setShowDeletePaymentModal({ show: true, paymentId: p.id })}
+                                  className="p-1 cursor-pointer text-rose-700 hover:text-rose-700"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </td>
                             </tr>
                           );
                         })}
@@ -745,6 +778,28 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
               <button onClick={() => setShowDeleteUserModal(false)} disabled={isProcessing} className="px-4 py-2 text-xs font-bold text-slate-500">Cancel</button>
               <button onClick={handleConfirmDeleteUser} disabled={isProcessing} className="px-5 py-2 bg-rose-600 text-white font-bold text-xs rounded-xl shadow-md">
                 {isProcessing ? 'Purging Data...' : 'Yes, Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeletePaymentModal.show && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl border border-rose-100">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-100 rounded-2xl"><AlertOctagon size={22}/></div>
+              <h3 className="font-extrabold text-slate-900 text-base">Purge Payment Submission?</h3>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed bg-rose-50/50 p-3.5 rounded-2xl border border-rose-100">
+              Are you sure you want to delete this payment submission? 
+              This will permanently remove the submission.
+            </p>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button onClick={() => setShowDeletePaymentModal({ show: false, paymentId: null })} disabled={isProcessingPaymentDelete} className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-blue-200 rounded-xl cursor-pointer">Cancel</button>
+              <button onClick={() => handleDeletePayment(showDeletePaymentModal.paymentId)} disabled={isProcessingPaymentDelete} className="px-5 py-2 bg-rose-600 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer">
+                {isProcessingPaymentDelete ? 'Purging Data...' : 'Yes, Delete'}
               </button>
             </div>
           </div>
