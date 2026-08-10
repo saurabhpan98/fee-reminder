@@ -10,7 +10,7 @@ import { AdminPaymentRequestsPage } from './AdminPaymentRequestsPage';
 import { PLAN_CONFIG, PLANS } from '../utils/planUtils';
 import { 
    Users, Bell, LogOut, MessageSquare, PauseCircle, 
-   PlayCircle, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, CreditCard, Calendar, ArrowUpDown, Sparkles, Shield, CheckCircle2, AlertCircle, X
+   PlayCircle, Info, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, CreditCard, Calendar, ArrowUpDown, Sparkles, Shield, CheckCircle2, AlertCircle, X
 } from 'lucide-react';
 
 export const AdminDashboard = ({ adminUser, onLogout }) => {
@@ -37,8 +37,12 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // delete payment modal 
   const [showDeletePaymentModal, setShowDeletePaymentModal] = useState({ show: false, paymentId: null });
   const [isProcessingPaymentDelete, setIsProcessingPaymentDelete] = useState(false);
+
+  //see payment detail modal
+  const [viewPaymentModal, setViewPaymentModal] = useState({ show: false, payment: null });
 
   // Green Toast Notification State
   const [toastInfo, setToastInfo] = useState(null);
@@ -675,11 +679,11 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                           <th className="px-4 py-3 font-bold">Type of Payment</th>
                           <th className="px-4 py-3 font-bold">Month/Year</th>
                           <th className="px-4 py-3 font-bold">Amount</th>
-                          <th className="px-4 py-3 font-bold">Date of Payment</th>
+                          {/*<th className="px-4 py-3 font-bold">Date of Payment</th>*/}
                           <th className="px-4 py-3 font-bold">Date of Acceptance</th>
-                          <th className="px-4 py-3 font-bold">Details</th>
+                          {/*<th className="px-4 py-3 font-bold">Details</th>
                           <th className="px-4 py-3 font-bold">Status</th>
-                          <th className="px-4 py-3 font-bold">Admin Remarks</th>
+                          <th className="px-4 py-3 font-bold">Admin Remarks</th>*/}
                           <th className="px-4 py-3 font-bold">Action</th>
                         </tr>
                       </thead>
@@ -717,13 +721,13 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                                 {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
                               </td>
                               <td className="px-4 py-3 font-black text-slate-900">₹{p.amount}</td>
-                              <td className="px-4 py-3 font-bold text-slate-700">
+                              {/*<td className="px-4 py-3 font-bold text-slate-700">
                                 {submissionDate}
-                              </td>
+                              </td>*/}
                               <td className="px-4 py-3 font-bold text-emerald-700">
                                 {acceptanceDate}
                               </td>
-                              <td className="px-4 py-3 text-slate-600">{p.paymentDetails || 'N/A'}</td>
+                              {/*<td className="px-4 py-3 text-slate-600">{p.paymentDetails || 'N/A'}</td>
                               <td className="px-4 py-3">
                                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
                                   p.status === 'pending' ? 'bg-amber-100 text-amber-800' :
@@ -733,8 +737,14 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                                   {p.status}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 text-slate-500">{p.adminRemarks || '-'}</td>
+                              <td className="px-4 py-3 text-slate-500">{p.adminRemarks || '-'}</td>*/}
                               <td className="px-4 py-3">
+                                <button
+                                  onClick = {() => setViewPaymentModal({ show: true, payment: p })}
+                                  className="p-1 cursor-pointer text-blue-700 hover:text-blue-700 mr-2"
+                                >
+                                  <Info size = {12}/>
+                                </button>
                                 <button
                                   onClick={() => setShowDeletePaymentModal({ show: true, paymentId: p.id })}
                                   className="p-1 cursor-pointer text-rose-700 hover:text-rose-700"
@@ -805,6 +815,138 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
           </div>
         </div>
       )}
+
+
+      {/*view payment modal */}
+      {viewPaymentModal.show && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl border border-slate-100 relative">
+            
+            {/* Close Button */}
+            <button 
+              onClick={() => setViewPaymentModal({ show: false, payment: null })} 
+              className="absolute right-5 top-5 p-2 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors text-slate-400 hover:text-slate-600 cursor-pointer"
+              title="Close"
+            >
+              <X size={18} />
+            </button>
+
+            {/* Header Section */}
+            <div className="flex items-center gap-3 pr-8">
+              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl shrink-0">
+                <Info size={22} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base leading-snug">
+                  Payment Details
+                </h3>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Submitted transaction breakdown
+                </p>
+              </div>
+            </div>
+
+            {/* Hero Amount & Billing Month Card */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-50/80 via-indigo-50/30 to-slate-50 border border-indigo-100/80 flex justify-between items-center">
+              <div>
+                <span className="text-[10px] font-extrabold text-indigo-500 uppercase tracking-wider block">
+                  Billing Period
+                </span>
+                <p className="text-sm font-extrabold text-slate-800 mt-0.5">
+                  {new Date(0, viewPaymentModal.payment.month - 1).toLocaleString('default', { month: 'long' })} {viewPaymentModal.payment.year}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-extrabold text-indigo-500 uppercase tracking-wider block">
+                  Amount
+                </span>
+                <p className="text-xl font-black text-slate-900 mt-0.5">
+                  ₹{viewPaymentModal.payment.amount}
+                </p>
+              </div>
+            </div>
+
+            {/* Key-Value Details Grid */}
+            <div className="space-y-3 text-xs">
+              
+              {/* Payment Type & Status Badges */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                    Payment Type
+                  </span>
+                  <span className="font-bold text-slate-800 block truncate">
+                    {viewPaymentModal.payment.isPlanUpgradeRequest ? 'Plan Upgrade' : 
+                    viewPaymentModal.payment.isPlanDowngradeRequest ? 'Plan Downgrade' : 
+                    viewPaymentModal.payment.isCustomPlan ? 'Custom Plan' : 'Monthly Subscription'}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                    Status
+                  </span>
+                  <div>
+                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                      viewPaymentModal.payment.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' :
+                      viewPaymentModal.payment.status === 'rejected' ? 'bg-rose-100 text-rose-800' :
+                      'bg-amber-100 text-amber-800'
+                    }`}>
+                      {viewPaymentModal.payment.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Timestamps Row */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-0.5">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                    Submission Date
+                  </span>
+                  <p className="font-bold text-slate-700">
+                    {viewPaymentModal.payment.createdAt ? new Date(viewPaymentModal.payment.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                  </p>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-0.5">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                    Acceptance Date
+                  </span>
+                  <p className="font-bold text-emerald-700">
+                    {viewPaymentModal.payment.status === 'accepted' && viewPaymentModal.payment.updatedAt 
+                      ? new Date(viewPaymentModal.payment.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
+                      : '-'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Transaction Details */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                  Payment Details / Txn ID
+                </span>
+                <p className="font-medium text-slate-700 break-words leading-relaxed">
+                  {viewPaymentModal.payment.paymentDetails || 'N/A'}
+                </p>
+              </div>
+
+              {/* Admin Remarks */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                  Admin Remarks
+                </span>
+                <p className="font-medium text-slate-700 leading-relaxed">
+                  {viewPaymentModal.payment.adminRemarks || 'No remarks provided'}
+                </p>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+      
 
       {/* Floating Green Toast Notification at Bottom Right */}
       {toastInfo && (
