@@ -190,6 +190,10 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
       status: newStatus
     });
     setSelectedUser(prev => ({ ...prev, status: newStatus }));
+    setToastInfo({
+      message: `User account ${newStatus === 'stopped' ? 'stopped' : 'activated'}`,
+      isError: false
+    });
     setShowUserActionsDropdown(false); // Close dropdown
   };
 
