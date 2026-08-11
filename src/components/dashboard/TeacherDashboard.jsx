@@ -2,13 +2,17 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, query, where, getDocs, addDoc, doc, updateDoc } from 'firebase/firestore';
-import { Building, Plus, Lock, Sparkles, X } from 'lucide-react';
+import { Building, Plus, Lock, Sparkles, X, BarChart3, Building2 } from 'lucide-react';
 import { canCreateCoaching, getUserPlanConfig } from '../../utils/planUtils';
+import { AnalyticsSection } from './AnalyticsSection';
 
 export const TeacherDashboard = ({ userId, userData, onOpenUpgradeModal, onSelectCoaching }) => {
   const [coachings, setCoachings] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [formData, setFormData] = useState({ name: '', ownerName: '', address: '' });
+  
+  // Tab Switcher State: 'coachings' | 'analytics'
+  const [activeDashboardTab, setActiveDashboardTab] = useState('coachings');
 
   useEffect(() => {
     fetchCoachings();
@@ -46,7 +50,6 @@ export const TeacherDashboard = ({ userId, userData, onOpenUpgradeModal, onSelec
       alert("Plan limit reached. Please upgrade to Pro Plan.");
       return;
     }
-
     await addDoc(collection(db, 'coachings'), {
       ...formData,
       teacherId: userId,
@@ -90,54 +93,100 @@ export const TeacherDashboard = ({ userId, userData, onOpenUpgradeModal, onSelec
         </div>
       )}
 
-      {/* Dashboard Title & Actions Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">Your Coaching Institutes</h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Managing {coachings.length} of {planConfig.maxCoachings} allowed Coaching(s) ({planConfig.name})
-          </p>
-        </div>
-        <button
-          onClick={handleOpenAddModal}
-          className={`px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md ${
-            canAddMoreCoaching 
-              ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100'
-              : 'bg-amber-500 hover:bg-amber-600 text-slate-900 shadow-amber-200 font-extrabold'
-          }`}
-        >
-          {canAddMoreCoaching ? <Plus size={16} /> : <Lock size={16} />}
-          {canAddMoreCoaching ? 'New Coaching' : 'Upgrade to Add Coaching'}
-        </button>
-      </div>
-
-      {coachings.length === 0 ? (
-        <div className="bg-white p-12 rounded-3xl border border-slate-100 text-center space-y-4 shadow-sm">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
-            <Building size={24} />
-          </div>
-          <p className="text-slate-600 font-medium">No coaching institutes added yet.</p>
+      {/* Dashboard Top Navigation Sub-Tabs */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-3">
+        <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl text-xs font-bold">
           <button
-            onClick={handleOpenAddModal}
-            className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold"
+            onClick={() => setActiveDashboardTab('coachings')}
+            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${
+              activeDashboardTab === 'coachings' 
+                ? 'bg-white text-indigo-600 shadow-xs' 
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
-            Add Your First Coaching
+            <Building2 size={16} />
+            <span>My Coachings ({coachings.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDashboardTab('analytics')}
+            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${
+              activeDashboardTab === 'analytics' 
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' 
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <BarChart3 size={16} />
+            <span>Analytics & Financial Insights</span>
           </button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {coachings.map((c) => (
-            <div
-              key={c.id}
-              onClick={() => onSelectCoaching(c)}
-              className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group"
-            >
-              <h3 className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{c.name}</h3>
-              <p className="text-xs text-slate-400 mt-1">Owner: {c.ownerName}</p>
-              <p className="text-xs text-slate-500 mt-3 truncate">{c.address}</p>
+
+        {activeDashboardTab === 'coachings' && (
+          <button
+            onClick={handleOpenAddModal}
+            className={`px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md ${
+              canAddMoreCoaching 
+                ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-100'
+                : 'bg-amber-500 hover:bg-amber-600 text-slate-900 shadow-amber-200 font-extrabold'
+            }`}
+          >
+            {canAddMoreCoaching ? <Plus size={16} /> : <Lock size={16} />}
+            {canAddMoreCoaching ? 'New Coaching' : 'Upgrade to Add Coaching'}
+          </button>
+        )}
+      </div>
+
+      {/* TAB 1: COACHINGS LIST */}
+      {activeDashboardTab === 'coachings' && (
+        <>
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-800">Your Coaching Institutes</h1>
+              <p className="text-xs text-slate-500 mt-1">
+                Managing {coachings.length} of {planConfig.maxCoachings} allowed Coaching(s) ({planConfig.name})
+              </p>
             </div>
-          ))}
-        </div>
+          </div>
+
+          {coachings.length === 0 ? (
+            <div className="bg-white p-12 rounded-3xl border border-slate-100 text-center space-y-4 shadow-sm">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+                <Building size={24} />
+              </div>
+              <p className="text-slate-600 font-medium">No coaching institutes added yet.</p>
+              <button
+                onClick={handleOpenAddModal}
+                className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold"
+              >
+                Add Your First Coaching
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {coachings.map((c) => (
+                <div
+                  key={c.id}
+                  onClick={() => onSelectCoaching(c)}
+                  className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+                >
+                  <h3 className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{c.name}</h3>
+                  <p className="text-xs text-slate-400 mt-1">Owner: {c.ownerName}</p>
+                  <p className="text-xs text-slate-500 mt-3 truncate">{c.address}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* TAB 2: FINANCIAL ANALYTICS */}
+      {activeDashboardTab === 'analytics' && (
+        <AnalyticsSection 
+          userId={userId} 
+          coachings={coachings} 
+          userData={userData} 
+          onOpenUpgradeModal={onOpenUpgradeModal} 
+        />
       )}
 
       {/* Add Coaching Modal */}
@@ -176,6 +225,7 @@ export const TeacherDashboard = ({ userId, userData, onOpenUpgradeModal, onSelec
           </div>
         </div>
       )}
+
     </div>
   );
 };
