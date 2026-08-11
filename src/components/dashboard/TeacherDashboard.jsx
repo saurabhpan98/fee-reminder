@@ -98,7 +98,7 @@ export const TeacherDashboard = ({ userId, userData, onOpenUpgradeModal, onSelec
         <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl text-xs font-bold">
           <button
             onClick={() => setActiveDashboardTab('coachings')}
-            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${
+            className={`cursor-pointer px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${
               activeDashboardTab === 'coachings' 
                 ? 'bg-white text-indigo-600 shadow-xs' 
                 : 'text-slate-600 hover:text-slate-900'
@@ -110,7 +110,7 @@ export const TeacherDashboard = ({ userId, userData, onOpenUpgradeModal, onSelec
 
           <button
             onClick={() => setActiveDashboardTab('analytics')}
-            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${
+            className={`cursor-pointer px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${
               activeDashboardTab === 'analytics' 
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' 
                 : 'text-slate-600 hover:text-slate-900'
@@ -167,7 +167,7 @@ export const TeacherDashboard = ({ userId, userData, onOpenUpgradeModal, onSelec
                 <div
                   key={c.id}
                   onClick={() => onSelectCoaching(c)}
-                  className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+                  className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all cursor-pointer group transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl"
                 >
                   <h3 className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{c.name}</h3>
                   <p className="text-xs text-slate-400 mt-1">Owner: {c.ownerName}</p>

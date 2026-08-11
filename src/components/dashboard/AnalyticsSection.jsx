@@ -200,7 +200,7 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         {/* Stat 1: Expected Revenue */}
-        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 relative overflow-hidden">
+        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 relative overflow-hidden transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl">
           <div className="flex justify-between items-center text-slate-500">
             <span className="text-[10px] font-extrabold uppercase tracking-wider">Expected Revenue</span>
             <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
@@ -212,7 +212,7 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
         </div>
 
         {/* Stat 2: Total Fee Collected */}
-        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 relative overflow-hidden">
+        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 relative overflow-hidden transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl">
           <div className="flex justify-between items-center text-slate-500">
             <span className="text-[10px] font-extrabold uppercase tracking-wider">Collected Revenue</span>
             <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
@@ -227,7 +227,7 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
         </div>
 
         {/* Stat 3: Pending Dues */}
-        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 relative overflow-hidden">
+        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 relative overflow-hidden transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl">
           <div className="flex justify-between items-center text-slate-500">
             <span className="text-[10px] font-extrabold uppercase tracking-wider">Pending Dues</span>
             <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
@@ -239,7 +239,7 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
         </div>
 
         {/* Stat 4: Collection Efficiency */}
-        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 relative overflow-hidden">
+        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 relative overflow-hidden transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl">
           <div className="flex justify-between items-center text-slate-500">
             <span className="text-[10px] font-extrabold uppercase tracking-wider">Collection Efficiency</span>
             <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
