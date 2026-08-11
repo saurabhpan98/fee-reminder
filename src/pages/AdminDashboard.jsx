@@ -10,7 +10,7 @@ import { AdminPaymentRequestsPage } from './AdminPaymentRequestsPage';
 import { PLAN_CONFIG, PLANS } from '../utils/planUtils';
 import { 
    Users, Bell, LogOut, MessageSquare, PauseCircle, 
-   PlayCircle, Info, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, CreditCard, Calendar, ArrowUpDown, Sparkles, Shield, CheckCircle2, AlertCircle, X
+   PlayCircle, Info, Trash2, ArrowLeft, Building2, AlertOctagon, Filter, MoreVertical, CreditCard, Calendar, ArrowUpDown, Sparkles, Shield, CheckCircle2, AlertCircle, X
 } from 'lucide-react';
 
 export const AdminDashboard = ({ adminUser, onLogout }) => {
@@ -47,6 +47,10 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   // Green Toast Notification State
   const [toastInfo, setToastInfo] = useState(null);
 
+  // User Actions Dropdown Menu State
+  const [showUserActionsDropdown, setShowUserActionsDropdown] = useState(false);
+  const userActionsRef = useRef(null);
+
   useEffect(() => {
     if (toastInfo) {
       const timer = setTimeout(() => {
@@ -61,14 +65,17 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
         setShowNotificationDropdown(false);
       }
+      if (userActionsRef.current && !userActionsRef.current.contains(event.target)) {
+        setShowUserActionsDropdown(false);
+      }
     };
-    if (showNotificationDropdown) {
+    if (showNotificationDropdown || showUserActionsDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showNotificationDropdown]);
+  }, [showNotificationDropdown, showUserActionsDropdown]);
 
   const fetchCoachingsForUser = async (userObj) => {
     const combinedDocs = new Map();
@@ -161,6 +168,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
     setSelectedUser(user);
     setViewingRequests(false);
     setPaymentSortOrder('latest');
+    setShowUserActionsDropdown(false); // Reset dropdown
     
     const coachings = await fetchCoachingsForUser(user);
     setUserCoachings(coachings);
@@ -178,6 +186,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
       status: newStatus
     });
     setSelectedUser(prev => ({ ...prev, status: newStatus }));
+    setShowUserActionsDropdown(false); // Close dropdown
   };
 
   const handleAdminChangePlan = async (newPlanId) => {
@@ -550,35 +559,56 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                     <p className="text-xs text-slate-500 mt-1 font-medium">{selectedUser.email}</p>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  {/* Dropdown Menu for Open Direct Chat, Pause, and Delete Actions */}
+                  <div className="relative" ref={userActionsRef}>
                     <button
-                      onClick={() => setChatPartner(selectedUser)}
-                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100 transition-all flex items-center gap-1.5"
+                      onClick={() => setShowUserActionsDropdown(!showUserActionsDropdown)}
+                      className="cursor-pointer p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors text-slate-700 flex items-center justify-center border border-slate-200"
+                      title="Actions"
                     >
-                      <MessageSquare size={14} /> Open Direct Chat
+                      <MoreVertical size={18} />
                     </button>
 
-                    {selectedUser.status !== 'deleted' && (
-                      <button
-                        onClick={handleToggleUserStatus}
-                        className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
-                          selectedUser.status === 'stopped' 
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                            : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                        }`}
-                      >
-                        {selectedUser.status === 'stopped' ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
-                        {selectedUser.status === 'stopped' ? 'Resume User Activity' : 'Pause User Activity'}
-                      </button>
-                    )}
+                    {showUserActionsDropdown && (
+                      <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-2xl border border-slate-100 py-1.5 z-50 text-slate-800 divide-y divide-slate-100 animate-in fade-in slide-in-from-top-2 duration-150">
+                        <button
+                          onClick={() => {
+                            setShowUserActionsDropdown(false);
+                            setChatPartner(selectedUser);
+                          }}
+                          className="cursor-pointer w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-indigo-600 font-bold text-xs flex items-center gap-2.5 transition-colors"
+                        >
+                          <MessageSquare size={15} />
+                          <span>Open Direct Chat</span>
+                        </button>
 
-                    {selectedUser.status !== 'deleted' && (
-                      <button
-                        onClick={() => setShowDeleteUserModal(true)}
-                        className="px-4 py-2.5 bg-rose-50 text-rose-600 border border-rose-100 hover:bg-rose-100 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
-                      >
-                        <Trash2 size={14} /> Delete Account
-                      </button>
+                        {selectedUser.status !== 'deleted' && (
+                          <button
+                            onClick={handleToggleUserStatus}
+                            className={`cursor-pointer w-full text-left px-4 py-2.5 font-bold text-xs flex items-center gap-2.5 transition-colors ${
+                              selectedUser.status === 'stopped' 
+                                ? 'hover:bg-emerald-50 text-emerald-700'
+                                : 'hover:bg-amber-50 text-amber-700'
+                            }`}
+                          >
+                            {selectedUser.status === 'stopped' ? <PlayCircle size={15} /> : <PauseCircle size={15} />}
+                            <span>{selectedUser.status === 'stopped' ? 'Resume User Activity' : 'Pause User Activity'}</span>
+                          </button>
+                        )}
+
+                        {selectedUser.status !== 'deleted' && (
+                          <button
+                            onClick={() => {
+                              setShowUserActionsDropdown(false);
+                              setShowDeleteUserModal(true);
+                            }}
+                            className="cursor-pointer w-full text-left px-4 py-2.5 hover:bg-rose-50 text-rose-600 font-bold text-xs flex items-center gap-2.5 transition-colors"
+                          >
+                            <Trash2 size={15} />
+                            <span>Delete Account</span>
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -741,13 +771,13 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                               <td className="px-4 py-3">
                                 <button
                                   onClick = {() => setViewPaymentModal({ show: true, payment: p })}
-                                  className="p-1 cursor-pointer text-blue-700 hover:text-blue-700 mr-2"
+                                  className="p-1 cursor-pointer text-blue-700 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-colors mr-2"
                                 >
                                   <Info size = {12}/>
                                 </button>
                                 <button
                                   onClick={() => setShowDeletePaymentModal({ show: true, paymentId: p.id })}
-                                  className="p-1 cursor-pointer text-rose-700 hover:text-rose-700"
+                                  className="p-1 cursor-pointer text-rose-700 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors"
                                 >
                                   <Trash2 size={12} />
                                 </button>
