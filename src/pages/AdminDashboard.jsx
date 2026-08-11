@@ -613,7 +613,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
                     <Building2 size={16} className="text-indigo-600" /> Registered Coachings/Tuitions ({userCoachings.length})
                   </h3>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto overflow-x-auto max-h-[220px] overflow-y-auto">
                     <table className="w-full text-left text-sm whitespace-nowrap">
                       <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
                         <tr>
