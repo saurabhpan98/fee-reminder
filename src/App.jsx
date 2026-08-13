@@ -236,7 +236,15 @@ export default function App() {
                   where('year', '==', currentYear)
                 );
                 const pSnap = await getDocs(pQuery);
-                const hasPaidCurrentMonth = !pSnap.empty;
+                // Map through docs to check data, then filter using .data()
+                const matchingPayments = pSnap.docs.filter((docSnap) => {
+                  const p = docSnap.data();
+                  return (
+                    p.coachingName === 'Monthly Subscription (Pro Academy)' || 
+                    p.isPlanUpgradeRequest === true
+                  );
+                });
+                const hasPaidCurrentMonth = matchingPayments.length > 0;
 
                 if (currentDay > 7 && !hasPaidCurrentMonth) {
                   if (uData.status !== 'stopped') {

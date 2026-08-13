@@ -849,6 +849,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                               <th className="px-4 py-3 font-bold">Month/Year</th>
                               <th className="px-4 py-3 font-bold">Amount</th>
                               <th className="px-4 py-3 font-bold">Date of Acceptance</th>
+                              <th className="px-4 py-3 font-bold">Status</th>
                               <th className="px-4 py-3 font-bold">Action</th>
                             </tr>
                           </thead>
@@ -888,6 +889,15 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                                   <td className="px-4 py-3 font-black text-slate-900">₹{p.amount}</td>
                                   <td className="px-4 py-3 font-bold text-emerald-700">
                                     {acceptanceDate}
+                                  </td>
+                                  <td className="px-4 py-3 font-black text-slate-900">
+                                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                                      p.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' :
+                                      p.status === 'rejected' ? 'bg-rose-100 text-rose-800' :
+                                      'bg-amber-100 text-amber-800'
+                                    }`}>
+                                      {p.status}
+                                    </span>
                                   </td>
                                   <td className="px-4 py-3">
                                     <button
