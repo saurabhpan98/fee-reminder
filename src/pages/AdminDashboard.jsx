@@ -866,15 +866,15 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                                   <td className="px-4 py-3 font-extrabold text-indigo-700">
                                     {p.isPlanUpgradeRequest ? (
                                       <span className="flex items-center gap-1.5 text-indigo-700">
-                                        <Sparkles size={13} className="text-amber-500" /> User Plan Upgrade ({p.planName})
+                                        <Sparkles size={13} className="text-amber-500" /> Plan Upgrade ({p.planName})
                                       </span>
                                     ) : p.isPlanDowngradeRequest ? (
                                       <span className="flex items-center gap-1.5 text-indigo-700">
-                                        <Sparkles size={13} className="text-amber-500" /> User Plan Downgrade ({p.planName})
+                                        <Sparkles size={13} className="text-amber-500" /> Plan Downgrade ({p.planName})
                                       </span>
-                                    ) : p.isCustomPlan ? (
-                                      <span className="flex items-center gap-1.5 text-slate-800 font-bold">
-                                        <Shield size={13} className="text-indigo-600" /> Custom Plan
+                                    ) : p.isCustomPayment ? (
+                                      <span className="flex items-center gap-1.5 text-amber-700">
+                                        <CreditCard size={13} className="text-amber-500" /> Custom Payment
                                       </span>
                                     ) : (
                                       <span className="flex items-center gap-1.5 text-slate-800 font-bold">
@@ -1029,7 +1029,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   <span className="font-bold text-slate-800 block truncate">
                     {viewPaymentModal.payment.isPlanUpgradeRequest ? 'Plan Upgrade' : 
                     viewPaymentModal.payment.isPlanDowngradeRequest ? 'Plan Downgrade' : 
-                    viewPaymentModal.payment.isCustomPlan ? 'Custom Plan' : 'Monthly Subscription'}
+                    viewPaymentModal.payment.isCustomPayment ? 'Custom Payment' : 'Monthly Subscription'}
                   </span>
                 </div>
 

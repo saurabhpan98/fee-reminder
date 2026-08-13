@@ -98,9 +98,14 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
             message: `Plan downgrade request accepted for ${userName}`,
             isError: false
           });
+        } else if(payment.isCustomPayment) {
+          setToastInfo({
+            message: `Custom payment accepted for ${userName}`,
+            isError: false
+          });
         } else {
           setToastInfo({
-            message: `Payment request accepted for ${userName}`,
+            message: `Monthly payment accepted for ${userName}`,
             isError: false
           });
         }
@@ -115,9 +120,14 @@ export const AdminPaymentRequestsPage = ({ onBack }) => {
             message: `Plan downgrade request rejected for ${userName}`,
             isError: true
           });
+        } else if(payment.isCustomPayment) {
+          setToastInfo({
+            message: `Custom payment request rejected for ${userName}`,
+            isError: true
+          });
         } else {
           setToastInfo({
-            message: `Payment request rejected for ${userName}`,
+            message: `Monthly Payment request rejected for ${userName}`,
             isError: true
           });
         }
