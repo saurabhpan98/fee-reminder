@@ -245,17 +245,21 @@ export default function App() {
                   );
                 });
                 const hasPaidCurrentMonth = matchingPayments.length > 0;
-
+                const statusChangedBy = uData.statusChangedBy.split(' ')[0] || 'system'; // Default to empty string if not set  //[0] contains admin or system
+                console.log(statusChangedBy);
                 if (currentDay > 7 && !hasPaidCurrentMonth) {
                   if (uData.status !== 'stopped') {
-                    await updateDoc(doc(db, 'users', user.uid), { status: 'stopped' });
+                    await updateDoc(doc(db, 'users', user.uid), { status: 'stopped', statusChangedBy: 'system' });
                     uData.status = 'stopped';
+                    uData.statusChangedBy = 'system'; // Indicate that the system auto-paused the account
                   }
-                } else if (hasPaidCurrentMonth && uData.status === 'stopped') {
+                } else if (hasPaidCurrentMonth && uData.status === 'stopped' && statusChangedBy === 'system') {
                   // Auto-unpause if payment is accepted
-                  await updateDoc(doc(db, 'users', user.uid), { status: 'active' });
+                  await updateDoc(doc(db, 'users', user.uid), { status: 'active', statusChangedBy: 'system' });
                   uData.status = 'active';
+                  uData.statusChangedBy = 'system'; // Indicate that the system auto-unpaused the account
                 }
+                // Admin manually paused the account, don't make active unless admin make it
               }
 
               setUserData(uData);
@@ -569,9 +573,17 @@ export default function App() {
 
       {/* Account Paused Banner */}
       {isAccountPaused && (
-        <div className="bg-amber-500 text-white p-2.5 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-sm">
-          <ShieldAlert size={16} />
-          <span>Your account has been paused due to non-payment. Please pay to activate your account. You can still access Payments Portal, Profile, and Chat with Admin.</span>
+        <div className="p-4 bg-amber-500 text-white text-center flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-white/20 rounded-xl backdrop-blur-xs">
+              <ShieldAlert size={18} className="text-amber-300" />
+            </div>
+            <div>
+              <p className="font-extrabold text-sm tracking-tight">
+                {userData.statusChangedBy.split(' ')[0] === 'admin' ? 'Your account has been paused by an administrator. Please contact support to activate your account.' : 'Your account has been paused due to non-payment. Please pay to activate your account. You can still access Payments Portal, Profile, and Chat with Admin.'}
+              </p>
+            </div>
+          </div>
         </div>
       )}
 

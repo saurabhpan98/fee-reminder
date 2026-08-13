@@ -186,12 +186,14 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
   const handleToggleUserStatus = async () => {
     if (!selectedUser) return;
     const newStatus = selectedUser.status === 'stopped' ? 'active' : 'stopped';
+    const statusChangedBy = 'admin ' + adminUser.email; 
     await updateDoc(doc(db, 'users', selectedUser.uid), {
-      status: newStatus
+      status: newStatus,
+      statusChangedBy: statusChangedBy,
     });
     setSelectedUser(prev => ({ ...prev, status: newStatus }));
     setToastInfo({
-      message: `User account ${newStatus === 'stopped' ? 'stopped' : 'activated'}`,
+      message: `User account ${newStatus === 'stopped' ? 'stopped' : 'activated'} by admin.`,
       isError: false
     });
     setShowUserActionsDropdown(false); // Close dropdown
