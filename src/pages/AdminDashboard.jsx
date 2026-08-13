@@ -673,7 +673,7 @@ export const AdminDashboard = ({ adminUser, onLogout }) => {
                   </div>
                 </div>
               ) : (
-                /* User Profile Sub-Page */
+                /* User Profile Sub-Page for active & stopped users*/
                 <div className="space-y-6">
                   <button
                     onClick={() => setSelectedUser(null)}
