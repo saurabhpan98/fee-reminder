@@ -17,6 +17,9 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPayment, setEditingPayment] = useState(null);
 
+  // Active View Tab State ('approved' | 'active')
+  const [activePaymentTab, setActivePaymentTab] = useState('approved');
+
   // Cancel Confirmation Modal State
   const [cancellingPayment, setCancellingPayment] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -256,7 +259,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
         </button>
         <button
           onClick={handleOpenAdd}
-          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-100 flex items-center gap-1.5 transition-all"
+          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-100 flex items-center gap-1.5 transition-all cursor-pointer"
         >
           <Plus size={16} /> Add Payment
         </button>
@@ -278,208 +281,247 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
           <div className="py-12 text-center text-slate-400 text-xs font-medium">Loading payments...</div>
         ) : (
           <>
-            {/* 1. ACTIVE REQUESTS & PROCESSING (CARDS VIEW) */}
-            <div className="space-y-3">
-              <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-                <Clock size={16} className="text-amber-500" /> Active Requests & Processing ({activeProcessingPayments.length})
-              </h3>
+            {/* Sliding Sub-Tab Switcher Bar */}
+            <div className="relative flex items-center bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80 w-full sm:w-fit text-xs font-bold shadow-xs">
+              {/* Sliding Background Indicator Pill */}
+              <div 
+                className="absolute top-1.5 bottom-1.5 rounded-xl bg-indigo-600 shadow-md shadow-indigo-200 transition-all duration-300 ease-out"
+                style={{
+                  left: activePaymentTab === 'approved' ? '6px' : '50%',
+                  width: 'calc(50% - 9px)'
+                }}
+              />
 
-              {activeProcessingPayments.length === 0 ? (
-                <div className="p-6 bg-slate-50 rounded-2xl text-center text-slate-400 text-xs font-medium border border-slate-100">
-                  No active pending or rejected payment requests.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {activeProcessingPayments.map((p) => {
-                    const isPending = p.status === 'pending';
-                    const isRejected = p.status === 'rejected';
-                    const monthName = new Date(0, p.month - 1).toLocaleString('default', { month: 'long' });
-                    const adminHistory = p.adminRemarksHistory || [];
+              {/* Tab 1: Approved Payments History */}
+              <button
+                type="button"
+                onClick={() => setActivePaymentTab('approved')}
+                className={`relative z-10 flex-1 sm:flex-initial px-4 py-2 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2 ${
+                  activePaymentTab === 'approved' ? 'text-white' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <CheckCircle size={16} />
+                <span>Approved Payments ({acceptedPayments.length})</span>
+              </button>
 
-                    return (
-                      <div
-                        key={p.id}
-                        className={`p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-4 shadow-xs ${
-                          isPending
-                            ? 'bg-amber-50/70 border-amber-300 text-amber-900'
-                            : 'bg-rose-50/80 border-rose-300 text-rose-900'
-                        }`}
-                      >
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-70">
-                                {monthName} {p.year}
-                              </span>
-                              <h3 className="text-xl font-black mt-0.5">₹ {p.amount}</h3>
-
-                              {p.isCustomPayment ? (
-                                <p className="text-[11px] font-extrabold text-amber-800 flex items-center gap-1.5 mt-1 bg-amber-100/80 px-2.5 py-1 rounded-lg w-fit">
-                                  <CreditCard size={13} className="text-amber-600 shrink-0" />
-                                  <span>Custom Payment</span>
-                                </p>
-                              ) : p.isPlanUpgradeRequest ? (
-                                <p className="text-[11px] font-extrabold text-indigo-700 flex items-center gap-1.5 mt-1 bg-indigo-100/80 px-2.5 py-1 rounded-lg w-fit">
-                                  <Sparkles size={13} className="text-indigo-600 shrink-0" />
-                                  <span>User Account Plan Upgrade (Pro Academy)</span>
-                                </p>
-                              ) : (
-                                <p className="text-[11px] font-extrabold text-slate-700 flex items-center gap-1.5 mt-1 bg-slate-100 px-2.5 py-1 rounded-lg w-fit">
-                                  <Shield size={13} className="text-indigo-600 shrink-0" />
-                                  <span>Monthly Payment ({p.planName || currentPlan.name})</span>
-                                </p>
-                              )}
-                            </div>
-
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold flex items-center gap-1 border uppercase ${
-                              isPending
-                                ? 'bg-amber-200/80 text-amber-900 border-amber-300'
-                                : 'bg-rose-200/80 text-rose-900 border-rose-300'
-                            }`}>
-                              {isPending ? <Clock size={12} /> : <XCircle size={12} />}
-                              {isPending ? 'Under Processing' : 'Rejected'}
-                            </span>
-                          </div>
-
-                          <div className="text-xs space-y-1 bg-white/60 p-3 rounded-xl border border-black/5">
-                            <p><strong>Payment Details:</strong> {p.paymentDetails || 'N/A'}</p>
-                            {p.userRemarks && <p><strong>Your Remark:</strong> {p.userRemarks}</p>}
-                            <p className="text-[10px] opacity-60 pt-1">
-                              Submitted on: {new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </p>
-                          </div>
-
-                          {/* Admin Remarks Thread */}
-                          {adminHistory.length > 0 ? (
-                            <div className="p-3 rounded-xl text-xs space-y-2 border bg-white/80 border-slate-200">
-                              <p className="font-bold flex items-center gap-1 text-[11px] text-slate-700">
-                                <History size={12} className="text-indigo-600" /> Admin Feedback History:
-                              </p>
-                              <div className="space-y-1.5 divide-y divide-slate-100">
-                                {adminHistory.map((item, idx) => (
-                                  <div key={idx} className="pt-1 text-[11px]">
-                                    <p className="font-semibold text-slate-800">{item.remark}</p>
-                                    <p className="text-[9px] text-slate-400">
-                                      {new Date(item.timestamp).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : p.adminRemarks ? (
-                            <div className="p-3 rounded-xl text-xs space-y-0.5 border bg-white/80 border-slate-200">
-                              <p className="font-bold flex items-center gap-1 text-[11px]">
-                                <MessageSquare size={12} /> Admin Remark:
-                              </p>
-                              <p>{p.adminRemarks}</p>
-                            </div>
-                          ) : null}
-                        </div>
-
-                        {/* Card Actions: Edit (if rejected) & Cancel Request */}
-                        <div className="pt-2 border-t border-slate-200/60 flex justify-end items-center gap-2">
-                          <button
-                            onClick={() => setCancellingPayment(p)}
-                            className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1"
-                          >
-                            <Trash2 size={13} /> Cancel Request
-                          </button>
-
-                          {isRejected && (
-                            <button
-                              onClick={() => handleOpenEdit(p)}
-                              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1"
-                            >
-                              <Edit3 size={13} /> Edit & Resubmit
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              {/* Tab 2: Active Requests & Processing */}
+              <button
+                type="button"
+                onClick={() => setActivePaymentTab('active')}
+                className={`relative z-10 flex-1 sm:flex-initial px-4 py-2 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2 ${
+                  activePaymentTab === 'active' ? 'text-white' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Clock size={16} />
+                <span>Active Requests & Processing</span>
+                {activeProcessingPayments.length > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    activePaymentTab === 'active' ? 'bg-amber-400 text-slate-900' : 'bg-amber-500 text-white'
+                  }`}>
+                    {activeProcessingPayments.length}
+                  </span>
+                )}
+              </button>
             </div>
 
-            {/* 2. ACCEPTED PAYMENTS HISTORY TABLE */}
-            <div className="space-y-3 pt-6 border-t border-slate-100">
-              <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-                <CheckCircle size={16} className="text-emerald-600" /> Approved Payments History ({acceptedPayments.length})
-              </h3>
+            {/* TAB 1 CONTENT: APPROVED PAYMENTS HISTORY TABLE */}
+            {activePaymentTab === 'approved' && (
+              <div className="space-y-3 pt-2 animate-in fade-in duration-200">
+                <div className="overflow-x-auto max-h-[350px] overflow-y-auto border border-slate-100 rounded-2xl shadow-xs">
+                  <table className="w-full text-left text-sm whitespace-nowrap">
+                    <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider sticky top-0 z-10">
+                      <tr>
+                        <th className="px-4 py-3 font-bold">Type of Payment</th>
+                        <th className="px-4 py-3 font-bold">Month/Year</th>
+                        <th className="px-4 py-3 font-bold">Amount</th>
+                        <th className="px-4 py-3 font-bold">Date of Payment</th>
+                        <th className="px-4 py-3 font-bold">Date of Acceptance</th>
+                        <th className="px-4 py-3 font-bold">Details</th>
+                        <th className="px-4 py-3 font-bold">Status</th>
+                        <th className="px-4 py-3 font-bold">Admin Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                      {acceptedPayments.map(p => {
+                        const submissionDate = p.createdAt 
+                          ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
+                          : '-';
+                        const acceptanceDate = p.updatedAt 
+                          ? new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
+                          : '-';
 
-              <div className="overflow-x-auto max-h-[220px] overflow-y-auto border border-slate-100 rounded-2xl shadow-xs">
-                <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider sticky top-0 z-10">
-                    <tr>
-                      <th className="px-4 py-3 font-bold">Type of Payment</th>
-                      <th className="px-4 py-3 font-bold">Month/Year</th>
-                      <th className="px-4 py-3 font-bold">Amount</th>
-                      <th className="px-4 py-3 font-bold">Date of Payment</th>
-                      <th className="px-4 py-3 font-bold">Date of Acceptance</th>
-                      <th className="px-4 py-3 font-bold">Details</th>
-                      <th className="px-4 py-3 font-bold">Status</th>
-                      <th className="px-4 py-3 font-bold">Admin Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                    {acceptedPayments.map(p => {
-                      const submissionDate = p.createdAt 
-                        ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
-                        : '-';
-                      const acceptanceDate = p.updatedAt 
-                        ? new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
-                        : '-';
+                        return (
+                          <tr key={p.id}>
+                            <td className="px-4 py-3 font-extrabold text-indigo-700">
+                              {p.isCustomPayment ? (
+                                <span className="flex items-center gap-1.5 text-amber-700">
+                                  <CreditCard size={13} className="text-amber-500" /> Custom Payment
+                                </span>
+                              ) : p.isPlanUpgradeRequest ? (
+                                <span className="flex items-center gap-1.5 text-indigo-700">
+                                  <Sparkles size={13} className="text-amber-500" /> Plan Upgrade to Pro Academy
+                                </span>
+                              ) : p.isPlanDowngradeRequest ? (
+                                <span className="flex items-center gap-1.5 text-indigo-700">
+                                  <Sparkles size={13} className="text-amber-500" /> Plan Downgrade to {p.planName}
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1.5 text-slate-700">
+                                  <Shield size={13} className="text-indigo-600" /> Monthly Payment (Current Plan: {p.planName || currentPlan.name})
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-slate-800">
+                              {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
+                            </td>
+                            <td className="px-4 py-3 font-black text-slate-900">₹ {p.amount}</td>
+                            <td className="px-4 py-3 font-bold text-slate-700">
+                              {submissionDate}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-emerald-700">
+                              {acceptanceDate}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">{p.paymentDetails || 'N/A'}</td>
+                            <td className="px-4 py-3">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800 flex items-center gap-1 w-fit">
+                                <Check size={10} /> Accepted
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-slate-500">{p.adminRemarks || '-'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {acceptedPayments.length === 0 && (
+                    <div className="p-6 text-center text-slate-400 text-xs font-medium bg-slate-50/50 rounded-2xl border border-slate-100/80">
+                      No approved payments found.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2 CONTENT: ACTIVE REQUESTS & PROCESSING (CARDS VIEW) */}
+            {activePaymentTab === 'active' && (
+              <div className="space-y-3 pt-2 animate-in fade-in duration-200">
+                {activeProcessingPayments.length === 0 ? (
+                  <div className="p-6 bg-slate-50 rounded-2xl text-center text-slate-400 text-xs font-medium border border-slate-100">
+                    No active pending or rejected payment requests.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {activeProcessingPayments.map((p) => {
+                      const isPending = p.status === 'pending';
+                      const isRejected = p.status === 'rejected';
+                      const monthName = new Date(0, p.month - 1).toLocaleString('default', { month: 'long' });
+                      const adminHistory = p.adminRemarksHistory || [];
 
                       return (
-                        <tr key={p.id}>
-                          <td className="px-4 py-3 font-extrabold text-indigo-700">
-                            {p.isCustomPayment ? (
-                              <span className="flex items-center gap-1.5 text-amber-700">
-                                <CreditCard size={13} className="text-amber-500" /> Custom Payment
+                        <div
+                          key={p.id}
+                          className={`p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-4 shadow-xs ${
+                            isPending
+                              ? 'bg-amber-50/70 border-amber-300 text-amber-900'
+                              : 'bg-rose-50/80 border-rose-300 text-rose-900'
+                          }`}
+                        >
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-70">
+                                  {monthName} {p.year}
+                                </span>
+                                <h3 className="text-xl font-black mt-0.5">₹ {p.amount}</h3>
+
+                                {p.isCustomPayment ? (
+                                  <p className="text-[11px] font-extrabold text-amber-800 flex items-center gap-1.5 mt-1 bg-amber-100/80 px-2.5 py-1 rounded-lg w-fit">
+                                    <CreditCard size={13} className="text-amber-600 shrink-0" />
+                                    <span>Custom Payment</span>
+                                  </p>
+                                ) : p.isPlanUpgradeRequest ? (
+                                  <p className="text-[11px] font-extrabold text-indigo-700 flex items-center gap-1.5 mt-1 bg-indigo-100/80 px-2.5 py-1 rounded-lg w-fit">
+                                    <Sparkles size={13} className="text-indigo-600 shrink-0" />
+                                    <span>User Account Plan Upgrade (Pro Academy)</span>
+                                  </p>
+                                ) : (
+                                  <p className="text-[11px] font-extrabold text-slate-700 flex items-center gap-1.5 mt-1 bg-slate-100 px-2.5 py-1 rounded-lg w-fit">
+                                    <Shield size={13} className="text-indigo-600 shrink-0" />
+                                    <span>Monthly Payment ({p.planName || currentPlan.name})</span>
+                                  </p>
+                                )}
+                              </div>
+
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold flex items-center gap-1 border uppercase ${
+                                isPending
+                                  ? 'bg-amber-200/80 text-amber-900 border-amber-300'
+                                  : 'bg-rose-200/80 text-rose-900 border-rose-300'
+                              }`}>
+                                {isPending ? <Clock size={12} /> : <XCircle size={12} />}
+                                {isPending ? 'Under Processing' : 'Rejected'}
                               </span>
-                            ) : p.isPlanUpgradeRequest ? (
-                              <span className="flex items-center gap-1.5 text-indigo-700">
-                                <Sparkles size={13} className="text-amber-500" /> Plan Upgrade to Pro Academy
-                              </span>
-                            ) : p.isPlanDowngradeRequest ? (
-                              <span className="flex items-center gap-1.5 text-indigo-700">
-                                <Sparkles size={13} className="text-amber-500" /> Plan Downgrade to {p.planName}
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1.5 text-slate-700">
-                                <Shield size={13} className="text-indigo-600" /> Monthly Payment (Current Plan: {p.planName || currentPlan.name})
-                              </span>
+                            </div>
+
+                            <div className="text-xs space-y-1 bg-white/60 p-3 rounded-xl border border-black/5">
+                              <p><strong>Payment Details:</strong> {p.paymentDetails || 'N/A'}</p>
+                              {p.userRemarks && <p><strong>Your Remark:</strong> {p.userRemarks}</p>}
+                              <p className="text-[10px] opacity-60 pt-1">
+                                Submitted on: {new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </p>
+                            </div>
+
+                            {/* Admin Remarks Thread */}
+                            {adminHistory.length > 0 ? (
+                              <div className="p-3 rounded-xl text-xs space-y-2 border bg-white/80 border-slate-200">
+                                <p className="font-bold flex items-center gap-1 text-[11px] text-slate-700">
+                                  <History size={12} className="text-indigo-600" /> Admin Feedback History:
+                                </p>
+                                <div className="space-y-1.5 divide-y divide-slate-100">
+                                  {adminHistory.map((item, idx) => (
+                                    <div key={idx} className="pt-1 text-[11px]">
+                                      <p className="font-semibold text-slate-800">{item.remark}</p>
+                                      <p className="text-[9px] text-slate-400">
+                                        {new Date(item.timestamp).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : p.adminRemarks ? (
+                              <div className="p-3 rounded-xl text-xs space-y-0.5 border bg-white/80 border-slate-200">
+                                <p className="font-bold flex items-center gap-1 text-[11px]">
+                                  <MessageSquare size={12} /> Admin Remark:
+                                </p>
+                                <p>{p.adminRemarks}</p>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          {/* Card Actions: Edit (if rejected) & Cancel Request */}
+                          <div className="pt-2 border-t border-slate-200/60 flex justify-end items-center gap-2">
+                            <button
+                              onClick={() => setCancellingPayment(p)}
+                              className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                            >
+                              <Trash2 size={13} /> Cancel Request
+                            </button>
+
+                            {isRejected && (
+                              <button
+                                onClick={() => handleOpenEdit(p)}
+                                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                              >
+                                <Edit3 size={13} /> Edit & Resubmit
+                              </button>
                             )}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-slate-800">
-                            {new Date(0, p.month - 1).toLocaleString('default', { month: 'short' })} {p.year}
-                          </td>
-                          <td className="px-4 py-3 font-black text-slate-900">₹ {p.amount}</td>
-                          <td className="px-4 py-3 font-bold text-slate-700">
-                            {submissionDate}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-emerald-700">
-                            {acceptanceDate}
-                          </td>
-                          <td className="px-4 py-3 text-slate-600">{p.paymentDetails || 'N/A'}</td>
-                          <td className="px-4 py-3">
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800 flex items-center gap-1 w-fit">
-                              <Check size={10} /> Accepted
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-slate-500">{p.adminRemarks || '-'}</td>
-                        </tr>
+                          </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
-                {acceptedPayments.length === 0 && (
-                  <div className="p-6 text-center text-slate-400 text-xs font-medium bg-slate-50/50 rounded-2xl border border-slate-100/80">
-                    No approved payments found.
                   </div>
                 )}
               </div>
-            </div>
+            )}
           </>
         )}
       </div>
@@ -510,7 +552,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                 type="button"
                 onClick={() => setCancellingPayment(null)}
                 disabled={isDeleting}
-                className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl cursor-pointer"
               >
                 Keep Request
               </button>
@@ -518,7 +560,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                 type="button"
                 onClick={handleConfirmCancelRequest}
                 disabled={isDeleting}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 size={14} />
                 {isDeleting ? 'Deleting...' : 'Yes, Delete & Cancel'}
@@ -537,7 +579,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                 <CreditCard size={18} className="text-indigo-600" />
                 {editingPayment ? 'Resubmit Payment Details' : 'Add Subscription Payment'}
               </h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -550,7 +592,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                       <button
                         type="button"
                         onClick={() => handlePaymentTypeChange('custom')}
-                        className={`py-2 rounded-xl transition-all ${
+                        className={`py-2 rounded-xl transition-all cursor-pointer ${
                           formData.paymentType === 'custom' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'
                         }`}
                       >
@@ -559,7 +601,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                       <button
                         type="button"
                         onClick={() => handlePaymentTypeChange('upgrade')}
-                        className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                        className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer ${
                           formData.paymentType === 'upgrade' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500'
                         }`}
                       >
@@ -572,7 +614,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                       <button
                         type="button"
                         onClick={() => handlePaymentTypeChange('monthly')}
-                        className={`py-2 rounded-xl transition-all ${
+                        className={`py-2 rounded-xl transition-all cursor-pointer ${
                           formData.paymentType === 'monthly' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'
                         }`}
                       >
@@ -581,7 +623,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                       <button
                         type="button"
                         onClick={() => handlePaymentTypeChange('custom')}
-                        className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                        className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer ${
                           formData.paymentType === 'custom' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500'
                         }`}
                       >
@@ -677,13 +719,13 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-500"
+                  className="px-4 py-2 text-xs font-bold text-slate-500 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow-md transition-all hover:bg-indigo-700"
+                  className="px-5 py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow-md transition-all hover:bg-indigo-700 cursor-pointer"
                 >
                   {editingPayment ? 'Resubmit Payment' : 'Submit Payment'}
                 </button>
@@ -703,7 +745,7 @@ export const UserPaymentsPage = ({ currentUser, userData, onBack }) => {
             <p className="flex-1 leading-snug">{toastInfo.message}</p>
             <button
               onClick={() => setToastInfo(null)}
-              className="p-1 hover:bg-white/20 rounded-lg transition-colors shrink-0"
+              className="p-1 hover:bg-white/20 rounded-lg transition-colors shrink-0 cursor-pointer"
             >
               <X size={16} />
             </button>
