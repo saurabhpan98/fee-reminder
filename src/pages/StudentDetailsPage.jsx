@@ -4,13 +4,14 @@ import { db } from '../firebase';
 import { doc, getDoc, updateDoc, setDoc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { 
   downloadPaymentReceiptPDF, 
-  downloadClassSubjectRangeReceiptPDF 
+  downloadClassSubjectRangeReceiptPDF,
+  downloadFeeSummaryCSV
 } from '../utils/exportUtils';
 import { getUserPlanConfig } from '../utils/planUtils';
 import { 
   Phone, Mail, MapPin, Trash2, AlertTriangle, ArrowLeft,
   UserCheck, UserMinus, DollarSign, Calendar, Edit3, X, Check,
-  BookOpen, Sparkles, FileText, MessageCircle, Lock
+  BookOpen, Sparkles, FileText, FileSpreadsheet, MessageCircle, Lock
 } from 'lucide-react';
 
 export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, onBack }) => {
@@ -141,6 +142,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
     if (!activeModalEnrollment) return;
     const finalStatus = statusOverride || feeRecord.status;
     let finalAmountPaid = amountOverride !== null ? amountOverride : Number(feeRecord.amountPaid || 0);
+
     if (finalStatus === 'paid') {
       finalAmountPaid = activeModalEnrollment.monthlyFee;
     } else if (finalStatus === 'unpaid') {
@@ -159,6 +161,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
       remark: feeRecord.remark || '',
       updatedAt: new Date().toISOString()
     });
+
     setActiveModalEnrollment(null);
     fetchStudent();
   };
@@ -212,13 +215,13 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
     let message = `*Fee Statement - ${coaching?.name || 'Tuition Center'}*\n\n`;
     message += `Dear *${student.name}*,\n`;
     message += `Here is your fee summary for *${enrollment.className} (${enrollment.subjectName})*:\n\n`;
-    message += `  *Period:* ${monthName} ${waYear}\n`;
-    message += `  *Monthly Tuition Fee:* ₹ ${monthlyFee}\n`;
-    message += `  *Amount Paid:* ₹ ${amountPaid}\n`;
-    message += `  *Remaining Balance Due:* ₹ ${balanceLeft}\n`;
-    message += `  *Status:* ${statusText}\n`;
+    message += `📅 *Period:* ${monthName} ${waYear}\n`;
+    message += `💵 *Monthly Tuition Fee:* ₹ ${monthlyFee}\n`;
+    message += `✅ *Amount Paid:* ₹ ${amountPaid}\n`;
+    message += `⚠️ *Remaining Balance Due:* ₹ ${balanceLeft}\n`;
+    message += `📊 *Status:* ${statusText}\n`;
     if (waFeeRecord.remark) {
-      message += `  *Remark:* ${waFeeRecord.remark}\n`;
+      message += `📝 *Remark:* ${waFeeRecord.remark}\n`;
     }
     message += `\nThank you!`;
 
@@ -226,6 +229,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
     if (cleanPhone.length === 10) {
       cleanPhone = `91${cleanPhone}`;
     }
+
     const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
     window.open(waUrl, '_blank');
     setWhatsappModal(null);
@@ -239,8 +243,8 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
     return selectedDate < joinMonthStart;
   };
 
-  // Gated PDF Receipt Generation
-  const handleGenerateClassSubjectReceipt = async () => {
+  // Gated PDF & CSV Receipt Generation
+  const handleGenerateClassSubjectReceipt = async (format = 'pdf') => {
     if (!student || !coaching || !receiptModal) return;
     const { enrollment } = receiptModal;
 
@@ -265,23 +269,46 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
         alert("Cannot download receipt for month when student was not enrolled");
         return;
       }
+
       const feeSnap = await getDocs(query(collection(db, 'feeRecords'), where('studentId', '==', studentId)));
       const allFeeRecords = feeSnap.docs.map(d => d.data());
       const rec = allFeeRecords.find(f => f.enrollmentId === enrollment.enrollmentId && f.month === Number(singleMonth) && f.year === Number(singleYear));
+      const recordData = rec || { status: 'unpaid', amountPaid: 0 };
 
-      downloadPaymentReceiptPDF({
-        coaching,
-        student,
-        classSubjectInfo: {
+      if (format === 'csv') {
+        const compiledRecords = [{
+          studentName: student.name,
+          phone: student.phone,
           className: enrollment.className,
           subjectName: enrollment.subjectName,
-          teacherName: teacherName,
           monthlyFee: enrollment.monthlyFee,
-          month: singleMonth,
-          year: singleYear
-        },
-        feeRecord: rec || { status: 'unpaid', amountPaid: 0 }
-      });
+          amountPaid: recordData.amountPaid || 0,
+          status: recordData.status || 'unpaid',
+          month: Number(singleMonth),
+          year: Number(singleYear),
+          remark: recordData.remark || ''
+        }];
+
+        downloadFeeSummaryCSV({
+          coachingName: coaching.name,
+          reportTitle: `Receipt_${student.name}_${singleMonth}_${singleYear}`,
+          records: compiledRecords
+        });
+      } else {
+        downloadPaymentReceiptPDF({
+          coaching,
+          student,
+          classSubjectInfo: {
+            className: enrollment.className,
+            subjectName: enrollment.subjectName,
+            teacherName: teacherName,
+            monthlyFee: enrollment.monthlyFee,
+            month: singleMonth,
+            year: singleYear
+          },
+          feeRecord: recordData
+        });
+      }
     } else {
       // Range Date Receipt (Pro Feature Gate Check)
       if (!planConfig.allowRangeReceipts) {
@@ -291,10 +318,12 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
 
       const startVal = Number(startYear) * 12 + Number(startMonth);
       const endVal = Number(endYear) * 12 + Number(endMonth);
+
       if (startVal > endVal) {
         alert("Invalid date range selection.");
         return;
       }
+
       if (isMonthBeforeEnrollment(enrollment, startMonth, startYear)) {
         alert("Cannot download receipt for month when student was not enrolled");
         return;
@@ -307,11 +336,16 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
       for (let y = Number(startYear); y <= Number(endYear); y++) {
         const mStart = (y === Number(startYear)) ? Number(startMonth) : 1;
         const mEnd = (y === Number(endYear)) ? Number(endMonth) : 12;
+
         for (let m = mStart; m <= mEnd; m++) {
           const currentVal = y * 12 + m;
           if (currentVal >= startVal && currentVal <= endVal) {
             const rec = allFeeRecords.find(f => f.enrollmentId === enrollment.enrollmentId && f.month === m && f.year === y);
             compiledRecords.push({
+              studentName: student.name,
+              phone: student.phone,
+              className: enrollment.className,
+              subjectName: enrollment.subjectName,
               month: m,
               year: y,
               monthlyFee: enrollment.monthlyFee,
@@ -323,16 +357,24 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
         }
       }
 
-      downloadClassSubjectRangeReceiptPDF({
-        coaching,
-        student,
-        classSubjectInfo: {
-          ...enrollment,
-          teacherName: teacherName
-        },
-        monthRecords: compiledRecords,
-        dateRangeText: `${startMonth}/${startYear} to ${endMonth}/${endYear}`
-      });
+      if (format === 'csv') {
+        downloadFeeSummaryCSV({
+          coachingName: coaching.name,
+          reportTitle: `Receipt_${student.name}_Range_${startMonth}_${startYear}_to_${endMonth}_${endYear}`,
+          records: compiledRecords
+        });
+      } else {
+        downloadClassSubjectRangeReceiptPDF({
+          coaching,
+          student,
+          classSubjectInfo: {
+            ...enrollment,
+            teacherName: teacherName
+          },
+          monthRecords: compiledRecords,
+          dateRangeText: `${startMonth}/${startYear} to ${endMonth}/${endYear}`
+        });
+      }
     }
     setReceiptModal(null);
   };
@@ -367,7 +409,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="group flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-600 transition-all shadow-xs hover:shadow-md hover:-translate-x-0.5 active:translate-x-0"
+          className="group flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-600 transition-all shadow-xs hover:shadow-md hover:-translate-x-0.5 active:translate-x-0 cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
           Back to Roster
@@ -406,13 +448,13 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
             <div className="flex items-center gap-2 self-start md:self-auto pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 w-full md:w-auto justify-end">
               <button
                 onClick={() => setIsEditing(true)}
-                className="px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-xs rounded-xl shadow-xs transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5"
+                className="px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-xs rounded-xl shadow-xs transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 cursor-pointer"
               >
                 <Edit3 className="w-3.5 h-3.5 text-slate-500" /> Edit Profile
               </button>
               <button
                 onClick={() => setShowDeleteModal(true)}
-                className="px-4 py-2.5 bg-red-50 hover:bg-red-100/80 text-red-600 font-semibold text-xs rounded-xl border border-red-100 shadow-xs transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5"
+                className="px-4 py-2.5 bg-red-50 hover:bg-red-100/80 text-red-600 font-semibold text-xs rounded-xl border border-red-100 shadow-xs transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Delete
               </button>
@@ -427,7 +469,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
               <button 
                 type="button" 
                 onClick={() => setIsEditing(false)}
-                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -445,6 +487,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                   placeholder="Student Name"
                 />
               </div>
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone Number</label>
                 <input
@@ -456,6 +499,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                   placeholder="Phone Number"
                 />
               </div>
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Email Address</label>
                 <input
@@ -466,6 +510,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                   placeholder="Email Address"
                 />
               </div>
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Residential Address</label>
                 <input
@@ -482,13 +527,13 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
               <button
                 type="button"
                 onClick={() => setIsEditing(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+                className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-95"
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
               >
                 Save Changes
               </button>
@@ -512,6 +557,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
         <div className="grid grid-cols-1 gap-3">
           {student.enrollments?.map((enr) => {
             const isActive = enr.status === 'active';
+
             return (
               <div 
                 key={enr.enrollmentId} 
@@ -544,7 +590,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                   {/* WhatsApp Fee Message Button (Gated) */}
                   <button
                     onClick={() => openWhatsappModal(enr)}
-                    className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold text-xs rounded-xl border border-emerald-200 transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 shadow-xs"
+                    className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold text-xs rounded-xl border border-emerald-200 transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer"
                     title="Send WhatsApp Fee Details"
                   >
                     <MessageCircle className="w-3.5 h-3.5 text-emerald-600" /> 
@@ -555,7 +601,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                   {/* Interactive Fee Ledger Button */}
                   <button
                     onClick={() => openFeeModal(enr)}
-                    className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100/80 text-indigo-600 font-bold text-xs rounded-xl border border-indigo-100 transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5"
+                    className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100/80 text-indigo-600 font-bold text-xs rounded-xl border border-indigo-100 transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 cursor-pointer"
                   >
                     <DollarSign className="w-3.5 h-3.5" /> Fee Ledger
                   </button>
@@ -563,7 +609,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                   {/* Download Receipt Button */}
                   <button
                     onClick={() => setReceiptModal({ enrollment: enr })}
-                    className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl text-slate-700 font-bold text-xs transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 shadow-xs"
+                    className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl text-slate-700 font-bold text-xs transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer"
                     title="Generate & Download Receipt"
                   >
                     <FileText className="w-3.5 h-3.5 text-slate-500" /> Receipt
@@ -572,7 +618,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                   {/* Toggle Enrollment Status Button */}
                   <button
                     onClick={() => handleToggleEnrollmentStatus(enr.enrollmentId)}
-                    className={`px-3.5 py-2 font-bold text-xs rounded-xl transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 ${
+                    className={`px-3.5 py-2 font-bold text-xs rounded-xl transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 cursor-pointer ${
                       isActive 
                         ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80' 
                         : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80'
@@ -620,7 +666,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
                 disabled={isDeleting}
-                className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -628,7 +674,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                 type="button"
                 onClick={handleConfirmDeleteStudent}
                 disabled={isDeleting}
-                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded-xl shadow-lg shadow-red-200 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded-xl shadow-lg shadow-red-200 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 {isDeleting ? 'Purging Records...' : 'Yes, Delete Permanent'}
               </button>
@@ -652,7 +698,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
               </div>
               <button 
                 onClick={() => setActiveModalEnrollment(null)}
-                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -667,7 +713,6 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
               >
                 {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
               </select>
-
               <select 
                 value={selectedMonth} 
                 onChange={(e) => handleYearMonthChange(selectedYear, e.target.value)}
@@ -741,7 +786,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                   <button
                     type="button"
                     onClick={() => handleSaveFee('paid', monthlyFee)}
-                    className="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 transition-all flex items-center justify-center gap-1.5"
+                    className="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5" /> Pay Remaining Balance (₹ {amountLeft})
                   </button>
@@ -752,14 +797,14 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button 
                 onClick={() => setActiveModalEnrollment(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+                className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               {!isPreEnrollment(activeModalEnrollment) && (
                 <button 
                   onClick={() => handleSaveFee()}
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-95"
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
                 >
                   Save Status
                 </button>
@@ -782,7 +827,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                   {whatsappModal.enrollment.className} ({whatsappModal.enrollment.subjectName})
                 </p>
               </div>
-              <button onClick={() => setWhatsappModal(null)} className="p-1 text-slate-400 hover:text-slate-600">
+              <button onClick={() => setWhatsappModal(null)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X size={18} />
               </button>
             </div>
@@ -803,7 +848,6 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                   ))}
                 </select>
               </div>
-
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Year</label>
                 <select
@@ -841,7 +885,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
               <button
                 type="button"
                 onClick={() => setWhatsappModal(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl"
+                className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl cursor-pointer"
               >
                 Cancel
               </button>
@@ -849,7 +893,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                 type="button"
                 disabled={isWaPreEnrollment(whatsappModal.enrollment)}
                 onClick={handleSendWhatsappMessage}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 <MessageCircle size={14} /> Send WhatsApp Message
               </button>
@@ -858,7 +902,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
         </div>
       )}
 
-      {/* Class-Subject Specific Receipt Configuration Modal */}
+      {/* Class-Subject Specific Receipt Configuration Modal with PDF & CSV options */}
       {receiptModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl border border-slate-100">
@@ -871,13 +915,13 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                   {receiptModal.enrollment.className} ({receiptModal.enrollment.subjectName})
                 </p>
               </div>
-              <button onClick={() => setReceiptModal(null)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+              <button onClick={() => setReceiptModal(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
             </div>
 
             <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl text-xs font-extrabold">
               <button
                 onClick={() => setReceiptMode('single')}
-                className={`py-2 rounded-xl transition-all ${receiptMode === 'single' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'}`}
+                className={`py-2 rounded-xl transition-all cursor-pointer ${receiptMode === 'single' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'}`}
               >
                 Single Month
               </button>
@@ -889,7 +933,7 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
                     setReceiptMode('range');
                   }
                 }}
-                className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 ${
+                className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer ${
                   receiptMode === 'range' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'
                 }`}
               >
@@ -950,10 +994,25 @@ export const StudentDetailsPage = ({ studentId, userData, onOpenUpgradeModal, on
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-              <button onClick={() => setReceiptModal(null)} className="px-4 py-2 text-xs font-bold text-slate-500">Cancel</button>
-              <button onClick={handleGenerateClassSubjectReceipt} className="px-4 py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow-md">
-                Download PDF Receipt
+            {/* Receipt Modal Action Buttons: Download CSV & Download PDF */}
+            <div className="flex justify-end items-center gap-2 pt-3 border-t border-slate-100">
+              <button 
+                onClick={() => setReceiptModal(null)} 
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => handleGenerateClassSubjectReceipt('csv')} 
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                <FileSpreadsheet size={15} /> Download CSV
+              </button>
+              <button 
+                onClick={() => handleGenerateClassSubjectReceipt('pdf')} 
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white font-bold text-xs rounded-xl shadow-md transition-all hover:bg-indigo-700 cursor-pointer"
+              >
+                <FileText size={15} /> Download PDF
               </button>
             </div>
           </div>
