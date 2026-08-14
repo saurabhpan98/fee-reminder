@@ -141,3 +141,34 @@ Follow these steps to run **TuitionManager** on your local environment:
 ```bash
 git clone [https://github.com/your-username/tuition-manager.git](https://github.com/your-username/tuition-manager.git)
 cd tuition-manager
+
+### 2. Install Dependencies
+```bash
+npm install
+
+### 3. Configure Firebase Credentials
+Open src/firebase.js and update your Firebase project configuration credentials:
+
+```bash
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+### 4. Start the Development Server
+```bash
+npm run dev
+
+Open http://localhost:5173 in your browser to view the application.
+
+
+## 🧑‍💻 Developer & Author
+* Developer: Saurabh Panchal
+* Project Name: TuitionManager / Fee-Reminder
+
+## 📄 License
+NOT FOR USE
