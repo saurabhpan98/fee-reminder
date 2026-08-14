@@ -86,3 +86,58 @@ TuitionManager prioritizes data confidentiality, user privacy, and strict permis
 ---
 
 ## 📂 Project Directory Structure
+
+fee-reminder/
+├── src/
+│   ├── components/
+│   │   ├── admin/
+│   │   │   └── AdminAnalyticsSection.jsx   # System-wide admin metrics & charts
+│   │   ├── coaching/
+│   │   │   ├── CoachingView.jsx            # Class, Subject & Roster Manager
+│   │   │   ├── ExportReportModal.jsx       # CSV & PDF export modal
+│   │   │   └── RemindersTab.jsx            # Cutoff date defaulters list
+│   │   ├── common/
+│   │   │   ├── ForgotPasswordModal.jsx     # Password recovery modal
+│   │   │   ├── PasswordInput.jsx           # Toggleable password input
+│   │   │   └── UpgradePlanModal.jsx        # Plan upgrade & downgrade request modal
+│   │   ├── dashboard/
+│   │   │   ├── AnalyticsSection.jsx        # Teacher-level revenue analytics
+│   │   │   └── TeacherDashboard.jsx        # Primary educator dashboard
+│   │   └── ChatModal.jsx                   # E2E encrypted admin direct messaging
+│   ├── pages/
+│   │   ├── AddStudentPage.jsx              # Smart student enrollment form
+│   │   ├── AdminDashboard.jsx              # System administration portal
+│   │   ├── AdminPaymentRequestsPage.jsx    # Payment verification queue
+│   │   ├── AuthPage.jsx                    # Sign in & Account creation
+│   │   ├── ClassDetailsPage.jsx            # Individual class view & roster
+│   │   ├── LandingPage.jsx                 # Public landing page & FAQ
+│   │   ├── StudentDetailsPage.jsx          # Student profile & fee ledger
+│   │   ├── SubjectDetailsPage.jsx          # Subject batch detail view
+│   │   └── UserPaymentsPage.jsx            # User subscription payment portal
+│   ├── utils/
+│   │   ├── cryptoUtils.js                  # AES encryption/decryption helpers
+│   │   ├── exportUtils.js                  # PDF & CSV generation routines
+│   │   ├── helpers.js                      # Date formatting & constants
+│   │   └── planUtils.js                    # Subscription plan configurations
+│   ├── App.jsx                             # Central router & state manager
+│   ├── firebase.js                         # Firebase initialization & exports
+│   └── main.jsx                            # Application entry point
+├── package.json
+└── vite.config.js
+
+
+---
+
+## 🚀 Installation & Local Setup
+
+Follow these steps to run **TuitionManager** on your local environment:
+
+### Prerequisites
+* **Node.js** (v18.0.0 or higher recommended)
+* **npm** or **yarn** or **pnpm**
+* A **Firebase Project** with Authentication and Firestore Database enabled.
+
+### 1. Clone the Repository
+```bash
+git clone [https://github.com/your-username/tuition-manager.git](https://github.com/your-username/tuition-manager.git)
+cd tuition-manager
