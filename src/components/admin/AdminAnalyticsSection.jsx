@@ -1,14 +1,15 @@
 // src/components/admin/AdminAnalyticsSection.jsx
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { 
-  BarChart3, Users, CreditCard, Sparkles, Building2, 
-  TrendingUp, Calendar, CheckCircle2, Clock, XCircle 
+  BarChart3, Users, Sparkles, Building2, 
+  TrendingUp, Calendar, CheckCircle2, Clock, XCircle, Download, DollarSign
 } from 'lucide-react';
-import { PLAN_CONFIG, PLANS } from '../../utils/planUtils';
+import { PLANS, PLAN_CONFIG } from '../../utils/planUtils';
+import { downloadAdminPlatformReportPDF } from '../../utils/exportUtils';
 
-export const AdminAnalyticsSection = ({ users }) => {
+export const AdminAnalyticsSection = ({ users = [] }) => {
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
@@ -56,12 +57,17 @@ export const AdminAnalyticsSection = ({ users }) => {
   const totalCollectedRevenue = acceptedPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const totalPendingRevenue = pendingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-  // User Stats Breakdown
+  // User Stats Breakdown (Excluding deleted accounts)
+  const nonDeletedUsers = users.filter(u => u.status !== 'deleted');
+  const proUsers = nonDeletedUsers.filter(u => u.plan === PLANS.PRO);
+  const starterUsers = nonDeletedUsers.filter(u => !u.plan || u.plan === PLANS.STARTER);
   const activeUsers = users.filter(u => (u.status || 'active') === 'active');
   const stoppedUsers = users.filter(u => u.status === 'stopped');
   const deletedUsers = users.filter(u => u.status === 'deleted');
-  const proUsers = users.filter(u => u.plan === PLANS.PRO);
-  const starterUsers = users.filter(u => !u.plan || u.plan === PLANS.STARTER);
+
+  // Total Expected Revenue Calculation (Pro Users * ₹1,200)
+  const proPlanPrice = PLAN_CONFIG[PLANS.PRO]?.price || 1200;
+  const totalExpectedRevenue = proUsers.length * proPlanPrice;
 
   // 6-Month Platform Revenue Trend
   const trendData = [];
@@ -83,6 +89,33 @@ export const AdminAnalyticsSection = ({ users }) => {
 
   const maxTrendCollected = Math.max(...trendData.map(t => t.collected), 1);
 
+  // Download PDF Handler with TuitionManager Seal
+  const handleDownloadReport = () => {
+    const proPercent = users.length > 0 ? Math.round((proUsers.length / users.length) * 100) : 0;
+
+    downloadAdminPlatformReportPDF({
+      month: selectedMonth,
+      year: selectedYear,
+      metrics: {
+        totalExpectedRevenue,
+        totalCollectedRevenue,
+        totalPendingRevenue,
+        acceptedCount: acceptedPayments.length,
+        pendingCount: pendingPayments.length,
+        proUsersCount: proUsers.length,
+        starterUsersCount: starterUsers.length,
+        activeUsersCount: activeUsers.length,
+        stoppedUsersCount: stoppedUsers.length,
+        deletedUsersCount: deletedUsers.length,
+        totalCoachings: allCoachings.length,
+        totalStudents: allStudents.length,
+        proPlanPrice,
+        proPercent
+      },
+      paymentsList: currentMonthPayments
+    });
+  };
+
   if (loading) {
     return (
       <div className="py-12 bg-white rounded-3xl border border-slate-200/70 text-center space-y-3 shadow-xs">
@@ -94,7 +127,7 @@ export const AdminAnalyticsSection = ({ users }) => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Filter Header */}
+      {/* Filter Header with Download Report Button */}
       <div className="bg-white p-5 rounded-3xl border border-slate-200/70 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
@@ -105,38 +138,62 @@ export const AdminAnalyticsSection = ({ users }) => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-200">
-          <Calendar size={14} className="text-indigo-600 ml-2" />
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            className="bg-transparent text-xs font-extrabold text-slate-800 outline-none cursor-pointer pr-2"
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={handleDownloadReport}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold shadow-sm transition-all cursor-pointer hover:scale-105 active:scale-95"
+            title="Download Revenue & System Analysis PDF"
           >
-            {Array.from({ length: 12 }, (_, i) => (
-              <option key={i + 1} value={i + 1}>
-                {new Date(0, i).toLocaleString('default', { month: 'short' })}
-              </option>
-            ))}
-          </select>
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="bg-transparent text-xs font-extrabold text-slate-800 outline-none cursor-pointer pr-2"
-          >
-            <option value={2025}>2025</option>
-            <option value={2026}>2026</option>
-            <option value={2027}>2027</option>
-          </select>
+            <Download size={15} />
+            <span>Download Report</span>
+          </button>
+
+          <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-200">
+            <Calendar size={14} className="text-indigo-600 ml-2" />
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="bg-transparent text-xs font-extrabold text-slate-800 outline-none cursor-pointer pr-2"
+            >
+              {Array.from({ length: 12 }, (_, i) => (
+                <option key={i + 1} value={i + 1}>
+                  {new Date(0, i).toLocaleString('default', { month: 'short' })}
+                </option>
+              ))}
+            </select>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="bg-transparent text-xs font-extrabold text-slate-800 outline-none cursor-pointer pr-2"
+            >
+              <option value={2025}>2025</option>
+              <option value={2026}>2026</option>
+              <option value={2027}>2027</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* Top System Key Stat Cards */}
+      {/* Top System Key Stat Cards with Hover Lift Animations */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Collected Revenue */}
-        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl">
+        
+        {/* Card 1: Expected Revenue */}
+        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-default space-y-2 group">
+          <div className="flex justify-between items-center text-slate-500">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider">Expected Revenue</span>
+            <div className="p-2 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white text-indigo-600 rounded-xl transition-colors">
+              <DollarSign size={16} />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-slate-900">₹ {totalExpectedRevenue.toLocaleString('en-IN')}</p>
+          <p className="text-[11px] text-indigo-600 font-bold">{proUsers.length} Pro Users × ₹{proPlanPrice}</p>
+        </div>
+
+        {/* Card 2: Accepted Revenue */}
+        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-default space-y-2 group">
           <div className="flex justify-between items-center text-slate-500">
             <span className="text-[10px] font-extrabold uppercase tracking-wider">Accepted Revenue</span>
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+            <div className="p-2 bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white text-emerald-600 rounded-xl transition-colors">
               <CheckCircle2 size={16} />
             </div>
           </div>
@@ -144,11 +201,11 @@ export const AdminAnalyticsSection = ({ users }) => {
           <p className="text-[11px] text-slate-400 font-medium">{acceptedPayments.length} approved payments</p>
         </div>
 
-        {/* Pending Verification Dues */}
-        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl">
+        {/* Card 3: Pending Review */}
+        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-default space-y-2 group">
           <div className="flex justify-between items-center text-slate-500">
             <span className="text-[10px] font-extrabold uppercase tracking-wider">Pending Review</span>
-            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+            <div className="p-2 bg-amber-50 group-hover:bg-amber-600 group-hover:text-white text-amber-600 rounded-xl transition-colors">
               <Clock size={16} />
             </div>
           </div>
@@ -156,34 +213,22 @@ export const AdminAnalyticsSection = ({ users }) => {
           <p className="text-[11px] text-slate-400 font-medium">{pendingPayments.length} pending requests</p>
         </div>
 
-        {/* Platform Users Count */}
-        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl">
+        {/* Card 4: Platform Hierarchy */}
+        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-default space-y-2 group">
           <div className="flex justify-between items-center text-slate-500">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider">Registered Teachers</span>
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-              <Users size={16} />
-            </div>
-          </div>
-          <p className="text-2xl font-black text-slate-900">{users.length}</p>
-          <p className="text-[11px] text-indigo-600 font-bold">{proUsers.length} Pro Academy Users</p>
-        </div>
-
-        {/* Total Platform Coachings */}
-        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl">
-          <div className="flex justify-between items-center text-slate-500">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider">Active Coachings</span>
-            <div className="p-2 bg-violet-50 text-violet-600 rounded-xl">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider">Platform Hierarchy</span>
+            <div className="p-2 bg-violet-50 group-hover:bg-violet-600 group-hover:text-white text-violet-600 rounded-xl transition-colors">
               <Building2 size={16} />
             </div>
           </div>
-          <p className="text-2xl font-black text-slate-900">{allCoachings.length}</p>
-          <p className="text-[11px] text-slate-400 font-medium">{allStudents.length} total students enrolled</p>
+          <p className="text-2xl font-black text-slate-900">{users.length} Users</p>
+          <p className="text-[11px] text-slate-400 font-medium">{allCoachings.length} Coachings • {allStudents.length} Students</p>
         </div>
+
       </div>
 
       {/* Grid: 6-Month Platform Revenue Trend + User Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Revenue Trend Chart */}
         <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-200/70 p-6 shadow-xs space-y-4">
           <div className="flex justify-between items-center border-b border-slate-100 pb-3">
             <div>
@@ -228,7 +273,6 @@ export const AdminAnalyticsSection = ({ users }) => {
           </div>
         </div>
 
-        {/* Account Status & Plan Ratios */}
         <div className="bg-white rounded-3xl border border-slate-200/70 p-6 shadow-xs space-y-4">
           <div className="border-b border-slate-100 pb-3">
             <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
@@ -240,7 +284,7 @@ export const AdminAnalyticsSection = ({ users }) => {
           <div className="space-y-3 pt-1">
             <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-2xl flex justify-between items-center text-xs">
               <span className="font-extrabold text-indigo-900 flex items-center gap-1.5">
-                <Sparkles size={14} className="text-indigo-600" /> Pro Academy Users
+                <Sparkles size={14} className="text-indigo-600" /> Pro Academy Users (₹{proPlanPrice}/mo)
               </span>
               <span className="font-black text-indigo-700">{proUsers.length}</span>
             </div>

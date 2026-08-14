@@ -100,9 +100,8 @@ const generateCoachingSeal = (coachingName) => {
   // 5. Center Diagonal Blue Ribbon
   ctx.save();
   ctx.translate(centerX, centerY);
-  ctx.rotate((-12 * Math.PI) / 180); // Diagonal angle like the reference stamp
+  ctx.rotate((-12 * Math.PI) / 180);
 
-  // Ribbon tails
   ctx.fillStyle = '#0284c7';
   ctx.beginPath();
   ctx.moveTo(-140, -15);
@@ -122,7 +121,6 @@ const generateCoachingSeal = (coachingName) => {
   ctx.closePath();
   ctx.fill();
 
-  // Ribbon banner main rectangle
   ctx.fillStyle = '#0ea5e9';
   ctx.fillRect(-120, -25, 240, 50);
 
@@ -130,13 +128,11 @@ const generateCoachingSeal = (coachingName) => {
   ctx.lineWidth = 2;
   ctx.strokeRect(-117, -22, 234, 44);
 
-  // Ribbon Text
   ctx.fillStyle = '#ffffff';
   ctx.font = '900 18px Helvetica, Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   
-  // Truncate if coaching name is too long for center banner
   let bannerText = (coachingName || 'COACHING').toUpperCase();
   if (bannerText.length > 16) {
     bannerText = bannerText.slice(0, 14) + '..';
@@ -213,9 +209,9 @@ export const downloadPaymentReceiptPDF = ({ coaching, student, classSubjectInfo,
     startY: 83,
     head: [['Description', 'Month/Year', 'Status', 'Amount (INR)']],
     body: [
-      [`Monthly Fee - ${classSubjectInfo?.subjectName || ''}`, `${classSubjectInfo?.month}/${classSubjectInfo?.year}`, statusStr, `INR ${monthlyFee}`],
-      ['Amount Paid', '-', '-', `INR ${amountPaid}`],
-      ['Remaining Balance Due', '-', '-', `INR ${balanceDue}`]
+      [`Total Expected Revenue (Monthly Fee) - ${classSubjectInfo?.subjectName || ''}`, `${classSubjectInfo?.month}/${classSubjectInfo?.year}`, statusStr, `INR ${monthlyFee}`],
+      ['Total Revenue Obtained (Amount Paid)', '-', '-', `INR ${amountPaid}`],
+      ['Total Left for Current Month (Balance Due)', '-', '-', `INR ${balanceDue}`]
     ],
     theme: 'grid',
     headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
@@ -226,17 +222,32 @@ export const downloadPaymentReceiptPDF = ({ coaching, student, classSubjectInfo,
 
   const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : 115;
 
+  // Highlighted Summary Card (Expected, Obtained, and Left)
+  doc.setFillColor(238, 242, 255);
+  doc.roundedRect(10, finalY + 4, 84, 30, 3, 3, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('MONTHLY FINANCIAL SUMMARY', 14, finalY + 9.5);
+  doc.setFontSize(7.5);
+  doc.setTextColor(79, 70, 229); // Indigo
+  doc.text(`Total Expected Revenue: INR ${monthlyFee}`, 14, finalY + 15);
+  doc.setTextColor(16, 185, 129); // Emerald
+  doc.text(`Total Revenue Obtained: INR ${amountPaid}`, 14, finalY + 20.5);
+  doc.setTextColor(225, 29, 72); // Rose
+  doc.text(`Total Left for Month: INR ${balanceDue}`, 14, finalY + 26);
+
   if (feeRecord?.remark) {
     doc.setFont('helvetica', 'italic');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(100, 116, 139);
-    doc.text(`Remark: ${feeRecord.remark}`, 10, finalY + 8);
+    doc.text(`Remark: ${feeRecord.remark}`, 10, finalY + 39);
   }
 
   // --- DYNAMIC COACHING STAMP / SEAL ---
   try {
     const sealDataUrl = generateCoachingSeal(coaching?.name);
-    doc.addImage(sealDataUrl, 'PNG', 98, finalY + 12, 38, 38);
+    doc.addImage(sealDataUrl, 'PNG', 98, finalY + 2, 38, 38);
   } catch (err) {
     console.error('Error attaching coaching seal to PDF:', err);
   }
@@ -318,7 +329,7 @@ export const downloadClassSubjectRangeReceiptPDF = ({ coaching, student, classSu
 
   autoTable(doc, {
     startY: 90,
-    head: [['Month/Year', 'Monthly Fee', 'Paid Amount', 'Balance Left', 'Status', 'Remark']],
+    head: [['Month/Year', 'Expected Fee', 'Revenue Obtained', 'Total Left', 'Status', 'Remark']],
     body: tableBody,
     theme: 'grid',
     headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
@@ -329,22 +340,25 @@ export const downloadClassSubjectRangeReceiptPDF = ({ coaching, student, classSu
 
   const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : 140;
 
+  // Range Summary Card
   doc.setFillColor(238, 242, 255);
-  doc.roundedRect(110, finalY + 8, 86, 32, 3, 3, 'F');
+  doc.roundedRect(102, finalY + 8, 94, 38, 3, 3, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(30, 41, 59);
-  doc.text('STATEMENT SUMMARY', 114, finalY + 15);
+  doc.text('STATEMENT FINANCIAL SUMMARY', 106, finalY + 15);
   doc.setFontSize(8);
-  doc.text(`Total Agreed Fee: INR ${grandTotalFee}`, 114, finalY + 21);
-  doc.text(`Total Amount Paid: INR ${grandTotalPaid}`, 114, finalY + 26);
-  doc.setTextColor(225, 29, 72);
-  doc.text(`Total Remaining Left: INR ${grandTotalDue}`, 114, finalY + 31);
+  doc.setTextColor(79, 70, 229); // Indigo
+  doc.text(`Total Expected Revenue: INR ${grandTotalFee}`, 106, finalY + 21);
+  doc.setTextColor(16, 185, 129); // Emerald
+  doc.text(`Total Revenue Obtained: INR ${grandTotalPaid}`, 106, finalY + 27);
+  doc.setTextColor(225, 29, 72); // Rose
+  doc.text(`Total Left (Balance Due): INR ${grandTotalDue}`, 106, finalY + 33);
 
   // --- DYNAMIC COACHING STAMP / SEAL ON RANGE RECEIPT ---
   try {
     const sealDataUrl = generateCoachingSeal(coaching?.name);
-    doc.addImage(sealDataUrl, 'PNG', 20, finalY + 8, 42, 42);
+    doc.addImage(sealDataUrl, 'PNG', 20, finalY + 6, 44, 44);
   } catch (err) {
     console.error('Error attaching coaching seal to PDF:', err);
   }
@@ -361,7 +375,7 @@ export const downloadClassSubjectRangeReceiptPDF = ({ coaching, student, classSu
  * 3. Export Coaching Summary CSV
  */
 export const downloadFeeSummaryCSV = ({ coachingName, reportTitle, records }) => {
-  const headers = ['Student Name', 'Contact', 'Class Name', 'Subject Name', 'Month/Year', 'Monthly Fee (INR)', 'Amount Paid (INR)', 'Balance Due (INR)', 'Status', 'Remark'];
+  const headers = ['Student Name', 'Contact', 'Class Name', 'Subject Name', 'Month/Year', 'Total Expected Fee (INR)', 'Revenue Obtained (INR)', 'Total Left (INR)', 'Status', 'Remark'];
   const rows = records.map(r => [
     `"${r.studentName || ''}"`,
     `"${r.phone || ''}"`,
@@ -413,7 +427,7 @@ export const downloadFeeSummaryPDF = ({ coachingName, reportTitle, records }) =>
 
   autoTable(doc, {
     startY: 28,
-    head: [['Student Name', 'Contact', 'Class', 'Subject', 'Month/Year', 'Fee', 'Paid', 'Balance', 'Status']],
+    head: [['Student Name', 'Contact', 'Class', 'Subject', 'Month/Year', 'Total Expected Fee', 'Revenue Obtained', 'Total Left', 'Status']],
     body: tableData,
     theme: 'striped',
     headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
@@ -424,9 +438,168 @@ export const downloadFeeSummaryPDF = ({ coachingName, reportTitle, records }) =>
   doc.save(`${(coachingName || 'Coaching').replace(/\s+/g, '_')}_Summary_Report.pdf`);
 };
 
+/**
+ * 5. Download Admin Platform System & Revenue Report PDF with TuitionManager Company Stamp
+ */
+export const downloadAdminPlatformReportPDF = ({
+  month,
+  year,
+  metrics,
+  paymentsList = []
+}) => {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const monthName = new Date(0, month - 1).toLocaleString('default', { month: 'long' });
+  const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  // 1. Header Banner
+  doc.setFillColor(15, 23, 42); // Slate-900
+  doc.rect(0, 0, 210, 26, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.text('TUITIONMANAGER PLATFORM REPORT', 14, 12);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(203, 213, 225);
+  doc.text(`Monthly Financial & System Performance Analysis | Period: ${monthName} ${year}`, 14, 19);
+
+  // 2. Metadata Bar
+  doc.setTextColor(51, 65, 85);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.text('EXECUTIVE OVERVIEW & METRICS', 14, 34);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Generated: ${dateStr}`, 148, 34);
+
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(14, 37, 196, 37);
+
+  // Inside downloadAdminPlatformReportPDF function in src/utils/exportUtils.js:
+
+  autoTable(doc, {
+    startY: 40,
+    head: [['Metric Parameter', 'Value', 'Status / Category', 'Analysis Notes']],
+    body: [
+      [
+        'Total Expected Revenue',
+        `INR ${Number(metrics.totalExpectedRevenue || 0).toLocaleString('en-IN')}`,
+        'Projected Pro Subscriptions',
+        `${metrics.proUsersCount || 0} Pro Users × INR ${metrics.proPlanPrice || 1200}/month`
+      ],
+      [
+        'Total Revenue Obtained',
+        `INR ${Number(metrics.totalCollectedRevenue || 0).toLocaleString('en-IN')}`,
+        'Verified / Completed',
+        `${metrics.acceptedCount || 0} Successful Subscriptions Received`
+      ],
+      [
+        'Total Left / Pending Review',
+        `INR ${Number(metrics.totalPendingRevenue || 0).toLocaleString('en-IN')}`,
+        'Under Processing',
+        `${metrics.pendingCount || 0} Requests Awaiting Admin Verification`
+      ],
+      [
+        'Pro Academy Educators',
+        `${metrics.proUsersCount || 0} Teachers`,
+        'Paid Tier',
+        `${metrics.proPercent || 0}% of Total Registered Educators`
+      ],
+      [
+        'Starter Free Educators',
+        `${metrics.starterUsersCount || 0} Teachers`,
+        'Free Tier',
+        'Up to 50 Students Limit per User'
+      ],
+      [
+        'Active Coaching Centers',
+        `${metrics.totalCoachings || 0} Institutes`,
+        'Platform Active',
+        `${metrics.totalStudents || 0} Total Students Enrolled`
+      ],
+      [
+        'Account Status Ratio',
+        `Active: ${metrics.activeUsersCount} | Paused: ${metrics.stoppedUsersCount} | Terminated: ${metrics.deletedUsersCount}`,
+        'System Health',
+        'Real-time User Breakdown'
+      ]
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    margin: { left: 14, right: 14 }
+  });
+
+  const currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 7 : 95;
+
+  // 4. Monthly Transactions Breakdown Table
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(51, 65, 85);
+  doc.text(`TRANSACTION LEDGER BREAKDOWN (${monthName.toUpperCase()} ${year})`, 14, currentY);
+
+  const tableRows = paymentsList.map(p => {
+    const pType = p.isCustomPayment ? 'Custom Payment' : p.isPlanUpgradeRequest ? 'Plan Upgrade' : p.isPlanDowngradeRequest ? 'Plan Downgrade' : 'Monthly Subscription';
+    const subDate = p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '-';
+    const statusLabel = p.status === 'accepted' ? 'Accepted' : p.status === 'rejected' ? 'Rejected' : 'Pending';
+    return [
+      p.userName || 'N/A',
+      p.userEmail || 'N/A',
+      pType,
+      `INR ${p.amount || 0}`,
+      subDate,
+      statusLabel,
+      p.paymentDetails ? (p.paymentDetails.length > 28 ? p.paymentDetails.slice(0, 26) + '..' : p.paymentDetails) : 'N/A'
+    ];
+  });
+
+  autoTable(doc, {
+    startY: currentY + 3,
+    head: [['User Name', 'Email Address', 'Payment Type', 'Amount', 'Date', 'Status', 'Txn Details']],
+    body: tableRows.length > 0 ? tableRows : [['No transactions recorded for this selected month & year.', '-', '-', '-', '-', '-', '-']],
+    theme: 'grid',
+    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+    bodyStyles: { fontSize: 7, textColor: [51, 65, 85] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    margin: { left: 14, right: 14 }
+  });
+
+  const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : 170;
+
+  // 5. TuitionManager Company Stamp / Seal
+  try {
+    const sealDataUrl = generateCoachingSeal('TUITIONMANAGER');
+    const stampY = finalY + 6 > 230 ? 230 : finalY + 6;
+    doc.addImage(sealDataUrl, 'PNG', 152, stampY, 42, 42);
+    
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Official Verified Platform Stamp', 145, stampY + 46);
+  } catch (err) {
+    console.error('Error generating TuitionManager seal:', err);
+  }
+
+  // Footer
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.text('Confidential - Generated via TuitionManager System Admin Console.', 14, 287);
+
+  doc.save(`TuitionManager_Platform_Revenue_Report_${month}_${year}.pdf`);
+};
+
 export default {
   downloadPaymentReceiptPDF,
   downloadClassSubjectRangeReceiptPDF,
   downloadFeeSummaryCSV,
-  downloadFeeSummaryPDF
+  downloadFeeSummaryPDF,
+  downloadAdminPlatformReportPDF
 };
