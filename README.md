@@ -86,7 +86,7 @@ TuitionManager prioritizes data confidentiality, user privacy, and strict permis
 ---
 
 ## 📂 Project Directory Structure
-
+```
 fee-reminder/
 ├── src/
 │   ├── components/
@@ -124,7 +124,7 @@ fee-reminder/
 │   └── main.jsx                            # Application entry point
 ├── package.json
 └── vite.config.js
-
+```
 
 ---
 
@@ -141,11 +141,11 @@ Follow these steps to run **TuitionManager** on your local environment:
 ```bash
 git clone [https://github.com/your-username/tuition-manager.git](https://github.com/your-username/tuition-manager.git)
 cd tuition-manager
-
+```
 ### 2. Install Dependencies
 ```bash
 npm install
-
+```
 ### 3. Configure Firebase Credentials
 Open src/firebase.js and update your Firebase project configuration credentials:
 
@@ -158,11 +158,11 @@ const firebaseConfig = {
   messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
   appId: "YOUR_APP_ID"
 };
-
+```
 ### 4. Start the Development Server
 ```bash
 npm run dev
-
+```
 Open http://localhost:5173 in your browser to view the application.
 
 
