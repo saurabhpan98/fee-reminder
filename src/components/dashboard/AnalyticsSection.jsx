@@ -3,9 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { 
-  TrendingUp, DollarSign, PieChart, BarChart3, Users, 
+  TrendingUp, TrendingDown, DollarSign, PieChart, BarChart3, Users, 
   CheckCircle2, Clock, AlertCircle, Building2, Calendar, 
-  ArrowUpRight, Sparkles 
+  ArrowUpRight, Sparkles, Receipt, Wallet
 } from 'lucide-react';
 
 export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeModal }) => {
@@ -16,6 +16,7 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState([]);
   const [feeRecords, setFeeRecords] = useState([]);
+  const [expenses, setExpenses] = useState([]);
   const [trendData, setTrendData] = useState([]);
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
     try {
       const coachingIds = coachings.map(c => c.id);
 
-      // 1. Fetch Students across all user coachings
+      // 1. Fetch Students across user coachings
       const studentSnap = await getDocs(query(collection(db, 'students'), where('coachingId', 'in', coachingIds)));
       const studentList = studentSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       setStudents(studentList);
@@ -48,7 +49,19 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
       const records = feeSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       setFeeRecords(records);
 
-      // 3. Fetch 6 Months Historical Collection Trend Data
+      // 3. Fetch Expenses for selected month & year
+      const expSnap = await getDocs(
+        query(
+          collection(db, 'expenses'),
+          where('coachingId', 'in', coachingIds),
+          where('year', '==', Number(selectedYear)),
+          where('month', '==', Number(selectedMonth))
+        )
+      );
+      const expList = expSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setExpenses(expList);
+
+      // 4. Fetch 6 Months Historical Collection & Expense Trend
       const trendList = [];
       for (let i = 5; i >= 0; i--) {
         const d = new Date(selectedYear, selectedMonth - 1 - i, 1);
@@ -67,10 +80,20 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
           }
         });
 
+        const tExpSnap = await getDocs(
+          query(collection(db, 'expenses'), where('coachingId', 'in', coachingIds), where('year', '==', y), where('month', '==', m))
+        );
+        let mExpenses = 0;
+        tExpSnap.docs.forEach(docSnap => {
+          mExpenses += Number(docSnap.data().amount || 0);
+        });
+
         trendList.push({
           monthName: d.toLocaleString('default', { month: 'short' }),
           year: y,
-          collected: mCollected
+          collected: mCollected,
+          expenses: mExpenses,
+          profit: mCollected - mExpenses
         });
       }
       setTrendData(trendList);
@@ -114,13 +137,9 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
             cCollected += paid;
             totalCollectedFee += paid;
 
-            if (rec.status === 'paid') {
-              totalPaidEnrollments++;
-            } else if (rec.status === 'partially_paid') {
-              totalPartialEnrollments++;
-            } else {
-              totalUnpaidEnrollments++;
-            }
+            if (rec.status === 'paid') totalPaidEnrollments++;
+            else if (rec.status === 'partially_paid') totalPartialEnrollments++;
+            else totalUnpaidEnrollments++;
           } else {
             totalUnpaidEnrollments++;
           }
@@ -146,13 +165,25 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
   const overallEfficiency = totalExpectedFee > 0 ? Math.round((totalCollectedFee / totalExpectedFee) * 100) : 0;
   const totalActiveEnrollments = totalPaidEnrollments + totalPartialEnrollments + totalUnpaidEnrollments;
 
+  // --- EXPENSE & NET PROFIT CALCULATIONS ---
+  const totalCoachingExpenses = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const netProfitOrLoss = totalCollectedFee - totalCoachingExpenses;
+  const isNetProfit = netProfitOrLoss >= 0;
+  const profitMargin = totalCollectedFee > 0 ? Math.round((netProfitOrLoss / totalCollectedFee) * 100) : 0;
+
+  // Category breakdown
+  const categoryMap = {};
+  expenses.forEach(e => {
+    categoryMap[e.category] = (categoryMap[e.category] || 0) + Number(e.amount || 0);
+  });
+
   const maxTrendCollected = Math.max(...trendData.map(t => t.collected), 1);
 
   if (loading) {
     return (
       <div className="py-12 bg-white rounded-3xl border border-slate-100 text-center space-y-3">
         <Sparkles className="w-6 h-6 text-indigo-500 animate-spin mx-auto" />
-        <p className="text-xs font-bold text-slate-500">Calculating financial metrics & growth analytics...</p>
+        <p className="text-xs font-bold text-slate-500">Calculating financial metrics, expenses & profit analytics...</p>
       </div>
     );
   }
@@ -164,10 +195,10 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
       <div className="bg-white p-5 rounded-3xl border border-slate-200/70 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-            <BarChart3 size={18} className="text-indigo-600" /> Revenue & Collection Analytics
+            <BarChart3 size={18} className="text-indigo-600" /> Revenue & Profit/Loss Analytics
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Financial performance summary for {new Date(0, selectedMonth - 1).toLocaleString('default', { month: 'long' })} {selectedYear}
+            Financial summary for {new Date(0, selectedMonth - 1).toLocaleString('default', { month: 'long' })} {selectedYear}
           </p>
         </div>
 
@@ -196,11 +227,11 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
         </div>
       </div>
 
-      {/* Top Key Metric Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Top 5 Key Metric Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         
         {/* Stat 1: Expected Revenue */}
-        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 relative overflow-hidden transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl">
+        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex justify-between items-center text-slate-500">
             <span className="text-[10px] font-extrabold uppercase tracking-wider">Expected Revenue</span>
             <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
@@ -208,11 +239,11 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
             </div>
           </div>
           <p className="text-2xl font-black text-slate-900">₹ {totalExpectedFee.toLocaleString('en-IN')}</p>
-          <p className="text-[11px] text-slate-400 font-medium">From {totalActiveEnrollments} active enrollments</p>
+          <p className="text-[11px] text-slate-400 font-medium">From {totalActiveEnrollments} enrollments</p>
         </div>
 
         {/* Stat 2: Total Fee Collected */}
-        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 relative overflow-hidden transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl">
+        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex justify-between items-center text-slate-500">
             <span className="text-[10px] font-extrabold uppercase tracking-wider">Collected Revenue</span>
             <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
@@ -226,84 +257,96 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
           </div>
         </div>
 
-        {/* Stat 3: Pending Dues */}
-        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 relative overflow-hidden transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl">
+        {/* Stat 3: Total Expenses */}
+        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 hover:shadow-md hover:-translate-y-0.5 transition-all">
+          <div className="flex justify-between items-center text-slate-500">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider">Total Expenses</span>
+            <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+              <Receipt size={16} />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-rose-600">₹ {totalCoachingExpenses.toLocaleString('en-IN')}</p>
+          <p className="text-[11px] text-slate-400 font-medium">{expenses.length} expense entries</p>
+        </div>
+
+        {/* Stat 4: Net Profit / Loss */}
+        <div className={`p-5 rounded-3xl border shadow-xs space-y-2 hover:shadow-md hover:-translate-y-0.5 transition-all ${
+          isNetProfit ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' : 'bg-rose-50/80 border-rose-200 text-rose-950'
+        }`}>
+          <div className="flex justify-between items-center opacity-80">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider">
+              {isNetProfit ? 'Net Profit' : 'Net Loss'}
+            </span>
+            <div className={`p-2 rounded-xl ${isNetProfit ? 'bg-emerald-200/70 text-emerald-800' : 'bg-rose-200/70 text-rose-800'}`}>
+              <Wallet size={16} />
+            </div>
+          </div>
+          <p className={`text-2xl font-black ${isNetProfit ? 'text-emerald-700' : 'text-rose-700'}`}>
+            {isNetProfit ? '+' : '-'} ₹ {Math.abs(netProfitOrLoss).toLocaleString('en-IN')}
+          </p>
+          <p className="text-[11px] font-bold opacity-80">Margin: {profitMargin}%</p>
+        </div>
+
+        {/* Stat 5: Pending Dues */}
+        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 hover:shadow-md hover:-translate-y-0.5 transition-all">
           <div className="flex justify-between items-center text-slate-500">
             <span className="text-[10px] font-extrabold uppercase tracking-wider">Pending Dues</span>
-            <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
               <Clock size={16} />
             </div>
           </div>
-          <p className="text-2xl font-black text-rose-600">₹ {totalPendingFee.toLocaleString('en-IN')}</p>
-          <p className="text-[11px] text-slate-400 font-medium">{totalUnpaidEnrollments + totalPartialEnrollments} pending payments</p>
-        </div>
-
-        {/* Stat 4: Collection Efficiency */}
-        <div className="p-5 bg-white rounded-3xl border border-slate-200/70 shadow-xs space-y-2 relative overflow-hidden transform transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-xl">
-          <div className="flex justify-between items-center text-slate-500">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider">Collection Efficiency</span>
-            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
-              <TrendingUp size={16} />
-            </div>
-          </div>
-          <p className="text-2xl font-black text-slate-900">{overallEfficiency}%</p>
-          {/* Progress Bar */}
-          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-            <div 
-              className={`h-full transition-all duration-500 ${
-                overallEfficiency >= 80 ? 'bg-emerald-500' : overallEfficiency >= 50 ? 'bg-amber-500' : 'bg-rose-500'
-              }`}
-              style={{ width: `${Math.min(100, overallEfficiency)}%` }}
-            />
-          </div>
+          <p className="text-2xl font-black text-amber-600">₹ {totalPendingFee.toLocaleString('en-IN')}</p>
+          <p className="text-[11px] text-slate-400 font-medium">{totalUnpaidEnrollments + totalPartialEnrollments} pending</p>
         </div>
 
       </div>
 
-      {/* Grid: 6-Month Trend SVG Chart & Payment Status Distribution */}
+      {/* Grid: 6-Month Trend SVG Chart & Expense Category Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* 6-Month Collection Trend Bar Chart (2 Cols) */}
+        {/* 6-Month Trend Chart */}
         <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-200/70 p-6 shadow-xs space-y-4">
           <div className="flex justify-between items-center border-b border-slate-100 pb-3">
             <div>
               <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                <TrendingUp size={16} className="text-indigo-600" /> 6-Month Collection Growth Trend
+                <TrendingUp size={16} className="text-indigo-600" /> 6-Month Revenue & Expense Trend
               </h4>
-              <p className="text-xs text-slate-400">Total fees collected per month across all coaching centers</p>
+              <p className="text-xs text-slate-400">Monthly fees collected vs expenses</p>
             </div>
-            <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 font-bold text-[10px] uppercase rounded-full border border-indigo-100">
-              Historical Graph
-            </span>
+            <div className="flex items-center gap-3 text-[10px] font-bold">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-indigo-600" /> Collected</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-rose-400" /> Expenses</span>
+            </div>
           </div>
 
-          {/* SVG Pure Bar Graph */}
           <div className="pt-4 pb-2">
             <div className="h-44 flex items-end justify-between gap-3 sm:gap-6 px-2 border-b border-slate-200/80">
               {trendData.map((item, idx) => {
-                const heightPercent = maxTrendCollected > 0 ? Math.max(10, Math.round((item.collected / maxTrendCollected) * 100)) : 10;
+                const heightCollected = maxTrendCollected > 0 ? Math.max(8, Math.round((item.collected / maxTrendCollected) * 100)) : 8;
+                const heightExpense = maxTrendCollected > 0 ? Math.max(8, Math.round((item.expenses / maxTrendCollected) * 100)) : 8;
                 const isCurrent = idx === trendData.length - 1;
 
                 return (
                   <div key={idx} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group relative">
-                    {/* Tooltip Hover Value */}
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-lg absolute -top-8 whitespace-nowrap pointer-events-none shadow-md">
-                      ₹ {item.collected.toLocaleString('en-IN')}
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 text-white text-[10px] font-bold p-2 rounded-xl absolute -top-12 whitespace-nowrap pointer-events-none shadow-xl z-20 space-y-0.5 text-center">
+                      <p className="text-emerald-300">Revenue: ₹ {item.collected.toLocaleString('en-IN')}</p>
+                      <p className="text-rose-300">Expense: ₹ {item.expenses.toLocaleString('en-IN')}</p>
+                      <p className="font-black text-white">Net: ₹ {item.profit.toLocaleString('en-IN')}</p>
                     </div>
 
-                    {/* Bar */}
-                    <div className="w-full max-w-[40px] bg-slate-100 rounded-t-xl overflow-hidden flex items-end h-full">
+                    <div className="w-full max-w-[48px] flex items-end justify-center gap-1 h-full">
                       <div 
-                        className={`w-full rounded-t-xl transition-all duration-500 ${
-                          isCurrent 
-                            ? 'bg-gradient-to-t from-indigo-600 to-violet-500 shadow-md shadow-indigo-200' 
-                            : 'bg-indigo-200 group-hover:bg-indigo-400'
+                        className={`w-1/2 rounded-t-lg transition-all duration-500 ${
+                          isCurrent ? 'bg-indigo-600 shadow-sm' : 'bg-indigo-300 group-hover:bg-indigo-500'
                         }`}
-                        style={{ height: `${heightPercent}%` }}
+                        style={{ height: `${heightCollected}%` }}
+                      />
+                      <div 
+                        className="w-1/2 rounded-t-lg bg-rose-400 group-hover:bg-rose-500 transition-all duration-500"
+                        style={{ height: `${heightExpense}%` }}
                       />
                     </div>
 
-                    {/* Label */}
                     <span className={`text-[10px] font-extrabold ${isCurrent ? 'text-indigo-600' : 'text-slate-500'}`}>
                       {item.monthName}
                     </span>
@@ -314,65 +357,36 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
           </div>
         </div>
 
-        {/* Payment Status Distribution Breakdown (1 Col) */}
+        {/* Expense Category Breakdown */}
         <div className="bg-white rounded-3xl border border-slate-200/70 p-6 shadow-xs space-y-4">
           <div className="border-b border-slate-100 pb-3">
             <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-              <PieChart size={16} className="text-indigo-600" /> Enrollment Status Distribution
+              <PieChart size={16} className="text-rose-600" /> Expense Breakdown
             </h4>
-            <p className="text-xs text-slate-400">Status ratio for {new Date(0, selectedMonth - 1).toLocaleString('default', { month: 'short' })} {selectedYear}</p>
+            <p className="text-xs text-slate-400">Category costs for {new Date(0, selectedMonth - 1).toLocaleString('default', { month: 'short' })} {selectedYear}</p>
           </div>
 
-          <div className="space-y-3 pt-1">
-            
-            {/* Fully Paid */}
-            <div className="p-3 bg-emerald-50/70 border border-emerald-100 rounded-2xl space-y-1.5">
-              <div className="flex justify-between items-center text-xs font-extrabold text-emerald-900">
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 size={14} className="text-emerald-600" /> Fully Paid
-                </span>
-                <span>{totalPaidEnrollments} Students</span>
+          <div className="space-y-3 pt-1 max-h-[190px] overflow-y-auto pr-1">
+            {Object.entries(categoryMap).length === 0 ? (
+              <div className="p-8 text-center text-slate-400 text-xs font-medium">
+                No expenses logged for this month.
               </div>
-              <div className="w-full bg-emerald-200/60 h-1.5 rounded-full overflow-hidden">
-                <div 
-                  className="bg-emerald-600 h-full rounded-full transition-all duration-500"
-                  style={{ width: `${totalActiveEnrollments > 0 ? (totalPaidEnrollments / totalActiveEnrollments) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Partially Paid */}
-            <div className="p-3 bg-amber-50/70 border border-amber-100 rounded-2xl space-y-1.5">
-              <div className="flex justify-between items-center text-xs font-extrabold text-amber-900">
-                <span className="flex items-center gap-1.5">
-                  <Clock size={14} className="text-amber-600" /> Partially Paid
-                </span>
-                <span>{totalPartialEnrollments} Students</span>
-              </div>
-              <div className="w-full bg-amber-200/60 h-1.5 rounded-full overflow-hidden">
-                <div 
-                  className="bg-amber-500 h-full rounded-full transition-all duration-500"
-                  style={{ width: `${totalActiveEnrollments > 0 ? (totalPartialEnrollments / totalActiveEnrollments) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Unpaid */}
-            <div className="p-3 bg-rose-50/70 border border-rose-100 rounded-2xl space-y-1.5">
-              <div className="flex justify-between items-center text-xs font-extrabold text-rose-900">
-                <span className="flex items-center gap-1.5">
-                  <AlertCircle size={14} className="text-rose-600" /> Completely Unpaid
-                </span>
-                <span>{totalUnpaidEnrollments} Students</span>
-              </div>
-              <div className="w-full bg-rose-200/60 h-1.5 rounded-full overflow-hidden">
-                <div 
-                  className="bg-rose-500 h-full rounded-full transition-all duration-500"
-                  style={{ width: `${totalActiveEnrollments > 0 ? (totalUnpaidEnrollments / totalActiveEnrollments) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-
+            ) : (
+              Object.entries(categoryMap).map(([cat, amt]) => {
+                const percent = totalCoachingExpenses > 0 ? Math.round((amt / totalCoachingExpenses) * 100) : 0;
+                return (
+                  <div key={cat} className="space-y-1">
+                    <div className="flex justify-between text-xs font-bold text-slate-700">
+                      <span className="truncate pr-2">{cat}</span>
+                      <span className="text-rose-600">₹ {amt.toLocaleString('en-IN')} ({percent}%)</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-rose-500 h-full rounded-full" style={{ width: `${percent}%` }} />
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 

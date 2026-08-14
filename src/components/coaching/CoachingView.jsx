@@ -3,10 +3,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../firebase';
 import { collection, getDocs, addDoc, updateDoc, setDoc, doc } from 'firebase/firestore';
 import { RemindersTab } from './RemindersTab';
+import { ExpensesTab } from './ExpensesTab';
 import { 
   Plus, BookOpen, Bell, ArrowLeft, Search, X, 
-  Layers, Bookmark, ChevronRight, AlertCircle, Users, Calendar,
-  UserPlus
+  Layers, Bookmark, ChevronRight, AlertCircle, Users, Calendar, 
+  UserPlus, Receipt
 } from 'lucide-react';
 
 export const CoachingView = ({ 
@@ -14,12 +15,12 @@ export const CoachingView = ({
   initialState = {}, 
   onUpdateState, 
   onOpenAddStudent, 
-  onOpenClassDetails,
-  onOpenSubjectDetails,
+  onOpenClassDetails, 
+  onOpenSubjectDetails, 
   onOpenStudentDetails, 
   onGoBack 
 }) => {
-  const [activeTab, setActiveTab] = useState(initialState.activeTab || 'roster'); 
+  const [activeTab, setActiveTab] = useState(initialState.activeTab || 'roster'); // 'roster' | 'classes' | 'subjects' | 'reminders' | 'expenses'
   const [selectedClassId, setSelectedClassId] = useState(initialState.selectedClassId || '');
   const [selectedSubjectId, setSelectedSubjectId] = useState(initialState.selectedSubjectId || '');
   const [enrollmentStatusFilter, setEnrollmentStatusFilter] = useState(initialState.enrollmentStatusFilter || 'all');
@@ -67,7 +68,6 @@ export const CoachingView = ({
     fetchCoachingData();
   }, [coaching.id, selectedYear, selectedMonth]);
 
-  // Calculate system current month's pending fee reminders count by default on dashboard load
   const calculateCurrentRemindersCount = (studentList, feeDocs) => {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
@@ -98,6 +98,7 @@ export const CoachingView = ({
         const key = `${student.id}_${enr.enrollmentId}`;
         const feeRecord = currentFeeMap.get(key);
         const status = feeRecord?.status || 'unpaid';
+
         if (status === 'unpaid' || status === 'partially_paid') {
           count++;
         }
@@ -128,7 +129,6 @@ export const CoachingView = ({
     });
     setFeeRecords(records);
 
-    // Initial count calculation
     const count = calculateCurrentRemindersCount(coachingStudents, feeSnap.docs);
     setRemindersCount(count);
   };
@@ -169,7 +169,6 @@ export const CoachingView = ({
   const handleSaveFeeModal = async (e) => {
     e.preventDefault();
     if (!activeFeeModal) return;
-
     const { student, enrollment } = activeFeeModal;
     let finalAmount = Number(feeModalForm.amountPaid);
     if (feeModalForm.status === 'paid') finalAmount = enrollment.monthlyFee;
@@ -195,13 +194,11 @@ export const CoachingView = ({
   const handleAddClass = async (e) => {
     e.preventDefault();
     if (!newClassName.trim()) return;
-
     await addDoc(collection(db, 'coachings', coaching.id, 'classes'), {
       className: newClassName,
       subjects: [],
       createdAt: new Date().toISOString()
     });
-
     setNewClassName('');
     setShowAddClassModal(false);
     fetchCoachingData();
@@ -239,8 +236,8 @@ export const CoachingView = ({
     const primaryEnrollment = matchingEnrollment || enrollments[0];
 
     const filterVal = Number(selectedYear) * 12 + Number(selectedMonth);
-
     let isNotEnrolledYet = false;
+
     if (primaryEnrollment?.joinedAt) {
       const joinedDate = new Date(primaryEnrollment.joinedAt);
       const joinedVal = joinedDate.getFullYear() * 12 + (joinedDate.getMonth() + 1);
@@ -326,7 +323,7 @@ export const CoachingView = ({
       <div className="flex items-center justify-between">
         <button
           onClick={onGoBack}
-          className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs"
+          className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
         >
           <ArrowLeft size={16} /> Go Back
         </button>
@@ -343,7 +340,7 @@ export const CoachingView = ({
         <div className="relative" ref={quickMenuRef}>
           <button
             onClick={() => setShowQuickMenu(!showQuickMenu)}
-            className={`w-11 h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all duration-300 transform active:scale-95 ${
+            className={`w-11 h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all duration-300 transform active:scale-95 cursor-pointer ${
               showQuickMenu ? 'rotate-45 bg-slate-900 hover:bg-slate-800' : 'hover:scale-105'
             }`}
             title="Quick Options"
@@ -351,20 +348,18 @@ export const CoachingView = ({
             <Plus size={22} className="transition-transform duration-300" />
           </button>
 
-          {/* Smooth Dropdown Menu */}
           {showQuickMenu && (
             <div className="absolute right-0 mt-3 w-52 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/80 p-2 z-50 animate-in fade-in slide-in-from-top-3 duration-200 space-y-1">
               <div className="px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1">
                 Quick Options
               </div>
-
-              {/* Option 1: Add Class */}
+              
               <button
                 onClick={() => {
                   setShowQuickMenu(false);
                   setShowAddClassModal(true);
                 }}
-                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-indigo-50/70 transition-all flex items-center gap-2.5 group"
+                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-indigo-50/70 transition-all flex items-center gap-2.5 group cursor-pointer"
               >
                 <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
                   <Layers size={15} />
@@ -372,14 +367,13 @@ export const CoachingView = ({
                 <span>Add Class</span>
               </button>
 
-              {/* Option 2: Add Subject */}
               <button
                 onClick={() => {
                   setShowQuickMenu(false);
                   setTargetClassForSubject(classes[0]?.id || '');
                   setShowAddSubjectModal(true);
                 }}
-                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-indigo-50/70 transition-all flex items-center gap-2.5 group"
+                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-indigo-50/70 transition-all flex items-center gap-2.5 group cursor-pointer"
               >
                 <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
                   <Bookmark size={15} />
@@ -387,18 +381,30 @@ export const CoachingView = ({
                 <span>Add Subject</span>
               </button>
 
-              {/* Option 3: Add Student */}
               <button
                 onClick={() => {
                   setShowQuickMenu(false);
                   onOpenAddStudent();
                 }}
-                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50/50 hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2.5 group"
+                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50/50 hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2.5 group cursor-pointer"
               >
                 <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-600 group-hover:bg-white/20 group-hover:text-white transition-colors">
                   <UserPlus size={15} />
                 </div>
                 <span>Add Student</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowQuickMenu(false);
+                  handleTabChange('expenses');
+                }}
+                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50/50 hover:bg-rose-600 hover:text-white transition-all flex items-center gap-2.5 group cursor-pointer"
+              >
+                <div className="p-1.5 rounded-lg bg-rose-100 text-rose-600 group-hover:bg-white/20 group-hover:text-white transition-colors">
+                  <Receipt size={15} />
+                </div>
+                <span>Track Expenses</span>
               </button>
             </div>
           )}
@@ -409,31 +415,34 @@ export const CoachingView = ({
       <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
         <button
           onClick={() => handleTabChange('roster')}
-          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'roster' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-100'
           }`}
         >
           <BookOpen size={16} /> Student Roster
         </button>
+
         <button
           onClick={() => handleTabChange('classes')}
-          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'classes' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-100'
           }`}
         >
           <Layers size={16} /> Classes
         </button>
+
         <button
           onClick={() => handleTabChange('subjects')}
-          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'subjects' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-100'
           }`}
         >
           <Bookmark size={16} /> Subjects
         </button>
+
         <button
           onClick={() => handleTabChange('reminders')}
-          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'reminders' ? 'bg-amber-50 text-amber-700' : 'text-slate-500 hover:bg-slate-100'
           }`}
         >
@@ -443,6 +452,15 @@ export const CoachingView = ({
               {remindersCount}
             </span>
           )}
+        </button>
+
+        <button
+          onClick={() => handleTabChange('expenses')}
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'expenses' ? 'bg-rose-50 text-rose-700' : 'text-slate-500 hover:bg-slate-100'
+          }`}
+        >
+          <Receipt size={16} /> Expenses
         </button>
       </div>
 
@@ -468,6 +486,7 @@ export const CoachingView = ({
                   ))}
                 </select>
               </div>
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Target Year</label>
                 <select
@@ -483,6 +502,7 @@ export const CoachingView = ({
                   <option value={2027}>2027</option>
                 </select>
               </div>
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Class</label>
                 <select
@@ -494,6 +514,7 @@ export const CoachingView = ({
                   {classes.map(c => <option key={c.id} value={c.id}>{c.className}</option>)}
                 </select>
               </div>
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Select Subject</label>
                 <select
@@ -506,6 +527,7 @@ export const CoachingView = ({
                   {activeSubjects.map(s => <option key={s.id} value={s.id}>{s.name} ({s.teacherName})</option>)}
                 </select>
               </div>
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Status Filter</label>
                 <select
@@ -572,9 +594,9 @@ export const CoachingView = ({
                         key={student.id} 
                         className={`transition-all ${
                           isLeftWithPendingFee 
-                            ? 'bg-amber-50/80 border-2 border-amber-400/80 shadow-md animate-pulse'
-                            : isNotEnrolledYet
-                            ? 'bg-slate-50/40 opacity-50'
+                            ? 'bg-amber-50/80 border-2 border-amber-400/80 shadow-md animate-pulse' 
+                            : isNotEnrolledYet 
+                            ? 'bg-slate-50/40 opacity-50' 
                             : isLeft 
                             ? 'bg-slate-50/60 opacity-75' 
                             : 'hover:bg-slate-50/70'
@@ -644,7 +666,7 @@ export const CoachingView = ({
                                 }`}
                               >
                                 {feeStatus === 'paid' && 'Paid'}
-                                {feeStatus === 'partially_paid' && `Partial (₹${amountLeft} left)`}
+                                {feeStatus === 'partially_paid' && `Partial (₹ ${amountLeft} left)`}
                                 {feeStatus === 'unpaid' && 'Unpaid'}
                               </button>
                             )}
@@ -654,7 +676,7 @@ export const CoachingView = ({
                         <td className="px-5 py-3 text-right">
                           <button
                             onClick={() => onOpenStudentDetails(student)}
-                            className="px-4 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg text-xs font-bold transition-all shadow-xs"
+                            className="px-4 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
                           >
                             View Profile
                           </button>
@@ -664,7 +686,6 @@ export const CoachingView = ({
                   })}
                 </tbody>
               </table>
-
               {sortedStudents.length === 0 && (
                 <div className="p-8 text-center text-slate-400 text-sm font-medium">
                   No students match the current search or filters.
@@ -713,7 +734,7 @@ export const CoachingView = ({
                     <span className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
                       <Users size={14} /> {classStudents.length} Active Students
                     </span>
-                    <span className="text-[11px] text-slate-400 group-hover:text-slate-600 transition-colors">View Details </span>
+                    <span className="text-[11px] text-slate-400 group-hover:text-slate-600 transition-colors">View Details →</span>
                   </div>
                 </div>
               );
@@ -768,7 +789,7 @@ export const CoachingView = ({
                     <span className="text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
                       <Users size={14} className="inline mr-1" /> {enrolledCount} Active Enrolled
                     </span>
-                    <span className="text-[11px] text-slate-400 group-hover:text-slate-600 transition-colors">View Details </span>
+                    <span className="text-[11px] text-slate-400 group-hover:text-slate-600 transition-colors">View Details →</span>
                   </div>
                 </div>
               );
@@ -792,13 +813,18 @@ export const CoachingView = ({
         />
       )}
 
+      {/* TAB 5: EXPENSES TAB */}
+      {activeTab === 'expenses' && (
+        <ExpensesTab coaching = {coaching} coachingId={coaching.id} />
+      )}
+
       {/* Quick Fee Modal */}
       {activeFeeModal && (
         <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
             <h3 className="font-bold text-slate-800 text-base">Update Fee Record</h3>
             <p className="text-xs text-slate-500">
-              {activeFeeModal.student.name} — {activeFeeModal.enrollment.className} ({activeFeeModal.enrollment.subjectName})
+              {activeFeeModal.student.name} • {activeFeeModal.enrollment.className} ({activeFeeModal.enrollment.subjectName})
             </p>
             <p className="text-[11px] font-bold text-indigo-600">
               Target Month: {selectedMonth}/{selectedYear}
@@ -850,8 +876,8 @@ export const CoachingView = ({
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setActiveFeeModal(null)} className="px-4 py-2 text-xs font-semibold text-slate-500">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold">Save Status</button>
+                <button type="button" onClick={() => setActiveFeeModal(null)} className="px-4 py-2 text-xs font-semibold text-slate-500 cursor-pointer">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold cursor-pointer">Save Status</button>
               </div>
             </form>
           </div>
@@ -873,8 +899,8 @@ export const CoachingView = ({
                 className="w-full p-2.5 border border-slate-200 rounded-xl text-xs outline-none"
               />
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddClassModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-500">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold">Save Class</button>
+                <button type="button" onClick={() => setShowAddClassModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 cursor-pointer">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold cursor-pointer">Save Class</button>
               </div>
             </form>
           </div>
@@ -916,13 +942,14 @@ export const CoachingView = ({
                 className="w-full p-2.5 border border-slate-200 rounded-xl text-xs outline-none"
               />
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowAddSubjectModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-500">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold">Save Subject</button>
+                <button type="button" onClick={() => setShowAddSubjectModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 cursor-pointer">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold cursor-pointer">Save Subject</button>
               </div>
             </form>
           </div>
         </div>
       )}
+
     </div>
   );
 };

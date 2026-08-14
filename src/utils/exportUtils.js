@@ -209,9 +209,9 @@ export const downloadPaymentReceiptPDF = ({ coaching, student, classSubjectInfo,
     startY: 83,
     head: [['Description', 'Month/Year', 'Status', 'Amount (INR)']],
     body: [
-      [`Total Expected Revenue (Monthly Fee) - ${classSubjectInfo?.subjectName || ''}`, `${classSubjectInfo?.month}/${classSubjectInfo?.year}`, statusStr, `INR ${monthlyFee}`],
-      ['Total Revenue Obtained (Amount Paid)', '-', '-', `INR ${amountPaid}`],
-      ['Total Left for Current Month (Balance Due)', '-', '-', `INR ${balanceDue}`]
+      [`Monthly Tuition Fee - ${classSubjectInfo?.subjectName || ''}`, `${classSubjectInfo?.month}/${classSubjectInfo?.year}`, statusStr, `INR ${monthlyFee}`],
+      ['Amount Paid', '-', '-', `INR ${amountPaid}`],
+      ['Remaining Balance Due', '-', '-', `INR ${balanceDue}`]
     ],
     theme: 'grid',
     headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
@@ -222,32 +222,23 @@ export const downloadPaymentReceiptPDF = ({ coaching, student, classSubjectInfo,
 
   const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : 115;
 
-  // Highlighted Summary Card (Expected, Obtained, and Left)
-  doc.setFillColor(238, 242, 255);
-  doc.roundedRect(10, finalY + 4, 84, 30, 3, 3, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(30, 41, 59);
-  doc.text('MONTHLY FINANCIAL SUMMARY', 14, finalY + 9.5);
-  doc.setFontSize(7.5);
-  doc.setTextColor(79, 70, 229); // Indigo
-  doc.text(`Total Expected Revenue: INR ${monthlyFee}`, 14, finalY + 15);
-  doc.setTextColor(16, 185, 129); // Emerald
-  doc.text(`Total Revenue Obtained: INR ${amountPaid}`, 14, finalY + 20.5);
-  doc.setTextColor(225, 29, 72); // Rose
-  doc.text(`Total Left for Month: INR ${balanceDue}`, 14, finalY + 26);
-
   if (feeRecord?.remark) {
     doc.setFont('helvetica', 'italic');
-    doc.setFontSize(7.5);
+    doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
-    doc.text(`Remark: ${feeRecord.remark}`, 10, finalY + 39);
+    doc.text(`Remark: ${feeRecord.remark}`, 10, finalY + 8);
   }
 
-  // --- DYNAMIC COACHING STAMP / SEAL ---
+  // Centered Coaching Seal on A5 Portrait
   try {
     const sealDataUrl = generateCoachingSeal(coaching?.name);
-    doc.addImage(sealDataUrl, 'PNG', 98, finalY + 2, 38, 38);
+    const stampWidth = 38;
+    const stampHeight = 38;
+    const centerX = 118;
+    const stampX = centerX - (stampWidth / 2);
+    const stampY = finalY + 6;
+
+    doc.addImage(sealDataUrl, 'PNG', stampX, stampY, stampWidth, stampHeight);
   } catch (err) {
     console.error('Error attaching coaching seal to PDF:', err);
   }
@@ -329,7 +320,7 @@ export const downloadClassSubjectRangeReceiptPDF = ({ coaching, student, classSu
 
   autoTable(doc, {
     startY: 90,
-    head: [['Month/Year', 'Expected Fee', 'Revenue Obtained', 'Total Left', 'Status', 'Remark']],
+    head: [['Month/Year', 'Monthly Fee', 'Amount Paid', 'Balance Left', 'Status', 'Remark']],
     body: tableBody,
     theme: 'grid',
     headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
@@ -348,17 +339,23 @@ export const downloadClassSubjectRangeReceiptPDF = ({ coaching, student, classSu
   doc.setTextColor(30, 41, 59);
   doc.text('STATEMENT FINANCIAL SUMMARY', 106, finalY + 15);
   doc.setFontSize(8);
-  doc.setTextColor(79, 70, 229); // Indigo
-  doc.text(`Total Expected Revenue: INR ${grandTotalFee}`, 106, finalY + 21);
-  doc.setTextColor(16, 185, 129); // Emerald
-  doc.text(`Total Revenue Obtained: INR ${grandTotalPaid}`, 106, finalY + 27);
-  doc.setTextColor(225, 29, 72); // Rose
-  doc.text(`Total Left (Balance Due): INR ${grandTotalDue}`, 106, finalY + 33);
+  doc.setTextColor(79, 70, 229);
+  doc.text(`Total Agreed Tuition Fee: INR ${grandTotalFee}`, 106, finalY + 21);
+  doc.setTextColor(16, 185, 129);
+  doc.text(`Total Amount Paid: INR ${grandTotalPaid}`, 106, finalY + 27);
+  doc.setTextColor(225, 29, 72);
+  doc.text(`Total Balance Left Due: INR ${grandTotalDue}`, 106, finalY + 33);
 
-  // --- DYNAMIC COACHING STAMP / SEAL ON RANGE RECEIPT ---
+  // Centered Coaching Seal on A4 Portrait
   try {
     const sealDataUrl = generateCoachingSeal(coaching?.name);
-    doc.addImage(sealDataUrl, 'PNG', 20, finalY + 6, 44, 44);
+    const stampWidth = 42;
+    const stampHeight = 42;
+    const centerX = 50;
+    const stampX = centerX - (stampWidth / 2);
+    const stampY = finalY + 6;
+
+    doc.addImage(sealDataUrl, 'PNG', stampX, stampY, stampWidth, stampHeight);
   } catch (err) {
     console.error('Error attaching coaching seal to PDF:', err);
   }
@@ -375,7 +372,7 @@ export const downloadClassSubjectRangeReceiptPDF = ({ coaching, student, classSu
  * 3. Export Coaching Summary CSV
  */
 export const downloadFeeSummaryCSV = ({ coachingName, reportTitle, records }) => {
-  const headers = ['Student Name', 'Contact', 'Class Name', 'Subject Name', 'Month/Year', 'Total Expected Fee (INR)', 'Revenue Obtained (INR)', 'Total Left (INR)', 'Status', 'Remark'];
+  const headers = ['Student Name', 'Contact', 'Class Name', 'Subject Name', 'Month/Year', 'Monthly Fee (INR)', 'Amount Paid (INR)', 'Balance Left (INR)', 'Status', 'Remark'];
   const rows = records.map(r => [
     `"${r.studentName || ''}"`,
     `"${r.phone || ''}"`,
@@ -427,7 +424,7 @@ export const downloadFeeSummaryPDF = ({ coachingName, reportTitle, records }) =>
 
   autoTable(doc, {
     startY: 28,
-    head: [['Student Name', 'Contact', 'Class', 'Subject', 'Month/Year', 'Total Expected Fee', 'Revenue Obtained', 'Total Left', 'Status']],
+    head: [['Student Name', 'Contact', 'Class', 'Subject', 'Month/Year', 'Monthly Fee', 'Amount Paid', 'Balance Left', 'Status']],
     body: tableData,
     theme: 'striped',
     headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
@@ -481,54 +478,18 @@ export const downloadAdminPlatformReportPDF = ({
   doc.setLineWidth(0.5);
   doc.line(14, 37, 196, 37);
 
-  // Inside downloadAdminPlatformReportPDF function in src/utils/exportUtils.js:
-
+  // 3. KPI Summary Table
   autoTable(doc, {
     startY: 40,
     head: [['Metric Parameter', 'Value', 'Status / Category', 'Analysis Notes']],
     body: [
-      [
-        'Total Expected Revenue',
-        `INR ${Number(metrics.totalExpectedRevenue || 0).toLocaleString('en-IN')}`,
-        'Projected Pro Subscriptions',
-        `${metrics.proUsersCount || 0} Pro Users × INR ${metrics.proPlanPrice || 1200}/month`
-      ],
-      [
-        'Total Revenue Obtained',
-        `INR ${Number(metrics.totalCollectedRevenue || 0).toLocaleString('en-IN')}`,
-        'Verified / Completed',
-        `${metrics.acceptedCount || 0} Successful Subscriptions Received`
-      ],
-      [
-        'Total Left / Pending Review',
-        `INR ${Number(metrics.totalPendingRevenue || 0).toLocaleString('en-IN')}`,
-        'Under Processing',
-        `${metrics.pendingCount || 0} Requests Awaiting Admin Verification`
-      ],
-      [
-        'Pro Academy Educators',
-        `${metrics.proUsersCount || 0} Teachers`,
-        'Paid Tier',
-        `${metrics.proPercent || 0}% of Total Registered Educators`
-      ],
-      [
-        'Starter Free Educators',
-        `${metrics.starterUsersCount || 0} Teachers`,
-        'Free Tier',
-        'Up to 50 Students Limit per User'
-      ],
-      [
-        'Active Coaching Centers',
-        `${metrics.totalCoachings || 0} Institutes`,
-        'Platform Active',
-        `${metrics.totalStudents || 0} Total Students Enrolled`
-      ],
-      [
-        'Account Status Ratio',
-        `Active: ${metrics.activeUsersCount} | Paused: ${metrics.stoppedUsersCount} | Terminated: ${metrics.deletedUsersCount}`,
-        'System Health',
-        'Real-time User Breakdown'
-      ]
+      ['Total Expected Revenue', `INR ${Number(metrics.totalExpectedRevenue || 0).toLocaleString('en-IN')}`, 'Projected Pro Subscriptions', `${metrics.proUsersCount || 0} Pro Users × INR ${metrics.proPlanPrice || 1200}/month`],
+      ['Total Revenue Obtained', `INR ${Number(metrics.totalCollectedRevenue || 0).toLocaleString('en-IN')}`, 'Verified / Completed', `${metrics.acceptedCount || 0} Successful Subscriptions Received`],
+      ['Total Left / Pending Review', `INR ${Number(metrics.totalPendingRevenue || 0).toLocaleString('en-IN')}`, 'Under Processing', `${metrics.pendingCount || 0} Requests Awaiting Admin Verification`],
+      ['Pro Academy Educators', `${metrics.proUsersCount || 0} Teachers`, 'Paid Tier', `${metrics.proPercent || 0}% of Total Registered Educators`],
+      ['Starter Free Educators', `${metrics.starterUsersCount || 0} Teachers`, 'Free Tier', 'Up to 50 Students Limit per User'],
+      ['Active Coaching Centers', `${metrics.totalCoachings || 0} Institutes`, 'Platform Active', `${metrics.totalStudents || 0} Total Students Enrolled`],
+      ['Account Status Ratio', `Active: ${metrics.activeUsersCount} | Paused: ${metrics.stoppedUsersCount} | Terminated: ${metrics.deletedUsersCount}`, 'System Health', 'Real-time User Breakdown']
     ],
     theme: 'grid',
     headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
@@ -576,13 +537,19 @@ export const downloadAdminPlatformReportPDF = ({
   // 5. TuitionManager Company Stamp / Seal
   try {
     const sealDataUrl = generateCoachingSeal('TUITIONMANAGER');
+    const stampWidth = 42;
+    const stampHeight = 42;
+    
+    const centerX = 168;
+    const stampX = centerX - (stampWidth / 2);
     const stampY = finalY + 6 > 230 ? 230 : finalY + 6;
-    doc.addImage(sealDataUrl, 'PNG', 152, stampY, 42, 42);
+
+    doc.addImage(sealDataUrl, 'PNG', stampX, stampY, stampWidth, stampHeight);
     
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(7.5);
     doc.setTextColor(100, 116, 139);
-    doc.text('Official Verified Platform Stamp', 145, stampY + 46);
+    doc.text('Official Verified Platform Stamp', centerX, stampY + stampHeight + 4, { align: 'center' });
   } catch (err) {
     console.error('Error generating TuitionManager seal:', err);
   }
@@ -596,10 +563,174 @@ export const downloadAdminPlatformReportPDF = ({
   doc.save(`TuitionManager_Platform_Revenue_Report_${month}_${year}.pdf`);
 };
 
+/**
+ * 6. Download Comprehensive Coaching Expenses Report PDF with Coaching Seal
+ */
+export const downloadCoachingExpensesReportPDF = ({
+  coaching,
+  month,
+  year,
+  expenses = [],
+  totalMonthlyExpenses = 0,
+  categoryTotals = {},
+  modeTotals = {}
+}) => {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const monthName = new Date(0, month - 1).toLocaleString('default', { month: 'long' });
+  const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  // 1. Header Banner
+  doc.setFillColor(225, 29, 72); // Rose-600
+  doc.rect(0, 0, 210, 26, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.text(coaching?.name || 'Tuition Center', 14, 12);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(254, 205, 211);
+  doc.text(`Location: ${coaching?.address || 'N/A'} | Owner: ${coaching?.ownerName || 'N/A'}`, 14, 19);
+
+  // 2. Report Subtitle & Details
+  doc.setTextColor(30, 41, 59);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('MONTHLY EXPENSES & OUTFLOW STATEMENT', 14, 34);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Billing Period: ${monthName} ${year}`, 14, 40);
+  doc.text(`Generated Date: ${dateStr}`, 148, 40);
+
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(14, 43, 196, 43);
+
+  // 3. Executive Outflow Summary Table
+  const topCategoryEntry = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0];
+  const primaryModeEntry = Object.entries(modeTotals).sort((a, b) => b[1] - a[1])[0];
+
+  autoTable(doc, {
+    startY: 46,
+    head: [['Outflow Metric Parameter', 'Value / Expenditure', 'Analysis & Notes']],
+    body: [
+      [
+        'Total Monthly Expenses',
+        `INR ${Number(totalMonthlyExpenses).toLocaleString('en-IN')}`,
+        `Recorded across ${expenses.length} distinct transaction(s)`
+      ],
+      [
+        'Top Spending Category',
+        topCategoryEntry ? `${topCategoryEntry[0]} (INR ${Number(topCategoryEntry[1]).toLocaleString('en-IN')})` : 'N/A',
+        topCategoryEntry ? `${Math.round((topCategoryEntry[1] / Math.max(1, totalMonthlyExpenses)) * 100)}% of total monthly outflow` : 'No category data'
+      ],
+      [
+        'Primary Outflow Payment Mode',
+        primaryModeEntry ? `${primaryModeEntry[0]} (INR ${Number(primaryModeEntry[1]).toLocaleString('en-IN')})` : 'UPI',
+        'Highest volume payment channel utilized'
+      ]
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [225, 29, 72], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+    alternateRowStyles: { fillColor: [255, 241, 242] },
+    margin: { left: 14, right: 14 }
+  });
+
+  let currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 80;
+
+  // 4. Category-Wise Cost Breakdown Table
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text(`CATEGORY-WISE EXPENDITURE SUMMARY`, 14, currentY);
+
+  const categoryRows = Object.entries(categoryTotals)
+    .sort((a, b) => b[1] - a[1])
+    .map(([cat, amt]) => {
+      const share = totalMonthlyExpenses > 0 ? Math.round((amt / totalMonthlyExpenses) * 100) : 0;
+      return [cat, `INR ${Number(amt).toLocaleString('en-IN')}`, `${share}% of Total`];
+    });
+
+  autoTable(doc, {
+    startY: currentY + 3,
+    head: [['Category Name', 'Total Amount', 'Percentage Share']],
+    body: categoryRows.length > 0 ? categoryRows : [['No categories logged.', '-', '-']],
+    theme: 'grid',
+    headStyles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+    bodyStyles: { fontSize: 7, textColor: [51, 65, 85] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    margin: { left: 14, right: 14 }
+  });
+
+  currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 130;
+
+  // 5. Itemized Transactions Breakdown Table
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text(`ITEMIZED EXPENSE TRANSACTIONS (${monthName.toUpperCase()} ${year})`, 14, currentY);
+
+  const tableRows = expenses.map(exp => [
+    exp.title || 'N/A',
+    exp.category || 'Other',
+    `INR ${Number(exp.amount || 0).toLocaleString('en-IN')}`,
+    exp.date ? new Date(exp.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-',
+    exp.paymentMode || 'UPI',
+    exp.remark ? (exp.remark.length > 25 ? exp.remark.slice(0, 23) + '..' : exp.remark) : '-'
+  ]);
+
+  autoTable(doc, {
+    startY: currentY + 3,
+    head: [['Title / Item', 'Category', 'Amount', 'Date', 'Mode', 'Notes / Remarks']],
+    body: tableRows.length > 0 ? tableRows : [['No expenses recorded for this month.', '-', '-', '-', '-', '-']],
+    theme: 'grid',
+    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+    bodyStyles: { fontSize: 7, textColor: [51, 65, 85] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    margin: { left: 14, right: 14 }
+  });
+
+  const finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY : 190;
+
+  // 6. Dynamic Coaching Stamp / Seal (Centered Alignment)
+  try {
+    const sealDataUrl = generateCoachingSeal(coaching?.name);
+    const stampWidth = 44;
+    const stampHeight = 44;
+    
+    const centerX = 168;
+    const stampX = centerX - (stampWidth / 2);
+    const stampY = finalY + 6 > 230 ? 230 : finalY + 6;
+
+    doc.addImage(sealDataUrl, 'PNG', stampX, stampY, stampWidth, stampHeight);
+
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Official Verified Coaching Seal', centerX, stampY + stampHeight + 4, { align: 'center' });
+  } catch (err) {
+    console.error('Error generating coaching seal for expenses:', err);
+  }
+
+  // Footer
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.text('This is an official computer-generated digital expenses statement.', 14, 287);
+
+  doc.save(`${(coaching?.name || 'Coaching').replace(/\s+/g, '_')}_Expenses_Report_${month}_${year}.pdf`);
+};
+
 export default {
   downloadPaymentReceiptPDF,
   downloadClassSubjectRangeReceiptPDF,
   downloadFeeSummaryCSV,
   downloadFeeSummaryPDF,
-  downloadAdminPlatformReportPDF
+  downloadAdminPlatformReportPDF,
+  downloadCoachingExpensesReportPDF
 };
