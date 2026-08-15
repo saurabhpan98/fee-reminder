@@ -4,6 +4,9 @@ import { db } from '../../firebase';
 import { collection, getDocs, addDoc, updateDoc, setDoc, doc } from 'firebase/firestore';
 import { RemindersTab } from './RemindersTab';
 import { ExpensesTab } from './ExpensesTab';
+import { Edit3, Settings } from 'lucide-react';
+import { EditCoachingModal } from './EditCoachingModal';
+import { AddTeacherModal } from './AddTeacherModal';
 import { 
   Plus, BookOpen, Bell, ArrowLeft, Search, X, 
   Layers, Bookmark, ChevronRight, AlertCircle, Users, Calendar, 
@@ -25,6 +28,11 @@ export const CoachingView = ({
   const [selectedSubjectId, setSelectedSubjectId] = useState(initialState.selectedSubjectId || '');
   const [enrollmentStatusFilter, setEnrollmentStatusFilter] = useState(initialState.enrollmentStatusFilter || 'all');
   const [searchTerm, setSearchTerm] = useState('');
+
+  const [showEditCoachingModal, setShowEditCoachingModal] = useState(false);
+  const [currentCoaching, setCurrentCoaching] = useState(coaching);
+
+  const [showAddTeacherModal, setShowAddTeacherModal] = useState(false);
 
   // Quick Action Dropdown (+ Button) State
   const [showQuickMenu, setShowQuickMenu] = useState(false);
@@ -333,8 +341,28 @@ export const CoachingView = ({
       <div className="bg-white rounded-3xl border border-slate-200/70 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xs relative">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800">{coaching.name}</h1>
-          <p className="text-xs text-slate-500 font-medium mt-1">Owner: {coaching.ownerName} | Location: {coaching.address}</p>
+          <p className="text-xs text-slate-500 font-medium mt-1">Owner: {coaching.ownerName} | Location: {coaching.address} | UPI: {coaching.upi}</p>
         </div>
+
+        {/* NAYA: Add Staff Teacher Button */}
+        <button
+          onClick={() => setShowAddTeacherModal(true)}
+          className="p-2.5 ml-auto bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl border border-indigo-200 transition-all flex items-center gap-1.5 text-xs font-bold shadow-xs cursor-pointer"
+          title="Create Staff Teacher Login"
+        >
+          <UserPlus size={16} />
+          <span className="hidden sm:inline"></span>
+        </button>
+
+        {/* NAYA EDIT COACHING DETAILS BUTTON */}
+        <button
+          onClick={() => setShowEditCoachingModal(true)}
+          className="p-2.5 bg-slate-100 ml-auto hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-2xl border border-slate-200 transition-all flex items-center gap-1.5 text-xs font-bold shadow-xs cursor-pointer"
+          title="Edit Coaching Details"
+        >
+          <Edit3 size={16} />
+          <span className="hidden sm:inline"></span>
+        </button>
 
         {/* Animated Plus Button Action */}
         <div className="relative" ref={quickMenuRef}>
@@ -345,7 +373,7 @@ export const CoachingView = ({
             }`}
             title="Quick Options"
           >
-            <Plus size={22} className="transition-transform duration-300" />
+            <Plus size={16} className="transition-transform duration-300" />
           </button>
 
           {showQuickMenu && (
@@ -438,6 +466,15 @@ export const CoachingView = ({
           }`}
         >
           <Bookmark size={16} /> Subjects
+        </button>
+
+        <button
+          onClick={() => handleTabChange('subjects')}
+          className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'subjects' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-100'
+          }`}
+        >
+          <Bookmark size={16} /> Faculty
         </button>
 
         <button
@@ -949,6 +986,30 @@ export const CoachingView = ({
           </div>
         </div>
       )}
+
+      {/* Modal Render at bottom */}
+      <EditCoachingModal
+        isOpen={showEditCoachingModal}
+        onClose={() => setShowEditCoachingModal(false)}
+        coaching={currentCoaching || coaching}
+        onUpdated={(updated) => {
+          setCurrentCoaching(updated);
+          if (onUpdateState) {
+            onUpdateState({ coaching: updated });
+          }
+        }}
+      />
+
+      {/* File ke bottom me Modal render karein */}
+      <AddTeacherModal
+        isOpen={showAddTeacherModal}
+        onClose={() => setShowAddTeacherModal(false)}
+        coaching={coaching}
+        classes={classes || []}
+        onTeacherAdded={() => {
+          alert("Faculty registered successfully!");
+        }}
+      />
 
     </div>
   );

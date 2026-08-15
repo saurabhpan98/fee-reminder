@@ -177,7 +177,11 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
     categoryMap[e.category] = (categoryMap[e.category] || 0) + Number(e.amount || 0);
   });
 
-  const maxTrendCollected = Math.max(...trendData.map(t => t.collected), 1);
+  // FIXED: Max scale considers BOTH collected and expenses dynamically
+  const maxTrendValue = Math.max(
+    ...trendData.map(t => Math.max(Number(t.collected || 0), Number(t.expenses || 0))),
+    1000
+  );
 
   if (loading) {
     return (
@@ -320,10 +324,16 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
           </div>
 
           <div className="pt-4 pb-2">
-            <div className="h-44 flex items-end justify-between gap-3 sm:gap-6 px-2 border-b border-slate-200/80">
+            {/* FIXED: Added overflow-hidden to ensure bars never bleed out */}
+            <div className="h-44 flex items-end justify-between gap-3 sm:gap-6 px-2 border-b border-slate-200/80 overflow-hidden">
               {trendData.map((item, idx) => {
-                const heightCollected = maxTrendCollected > 0 ? Math.max(8, Math.round((item.collected / maxTrendCollected) * 100)) : 8;
-                const heightExpense = maxTrendCollected > 0 ? Math.max(8, Math.round((item.expenses / maxTrendCollected) * 100)) : 8;
+                // FIXED: Strictly capped between min 6% and max 100%
+                const heightCollected = maxTrendValue > 0 
+                  ? Math.min(100, Math.max(6, Math.round((Number(item.collected || 0) / maxTrendValue) * 100))) 
+                  : 6;
+                const heightExpense = maxTrendValue > 0 
+                  ? Math.min(100, Math.max(6, Math.round((Number(item.expenses || 0) / maxTrendValue) * 100))) 
+                  : 6;
                 const isCurrent = idx === trendData.length - 1;
 
                 return (
@@ -334,15 +344,18 @@ export const AnalyticsSection = ({ userId, coachings, userData, onOpenUpgradeMod
                       <p className="font-black text-white">Net: ₹ {item.profit.toLocaleString('en-IN')}</p>
                     </div>
 
-                    <div className="w-full max-w-[48px] flex items-end justify-center gap-1 h-full">
+                    {/* FIXED: Set max height and overflow containment */}
+                    <div className="w-full max-w-[48px] flex items-end justify-center gap-1.5 h-full max-h-36 overflow-hidden">
                       <div 
-                        className={`w-1/2 rounded-t-lg transition-all duration-500 ${
+                        className={`w-1/2 rounded-t-md transition-all duration-500 ${
                           isCurrent ? 'bg-indigo-600 shadow-sm' : 'bg-indigo-300 group-hover:bg-indigo-500'
                         }`}
                         style={{ height: `${heightCollected}%` }}
                       />
                       <div 
-                        className="w-1/2 rounded-t-lg bg-rose-400 group-hover:bg-rose-500 transition-all duration-500"
+                        className={`w-1/2 rounded-t-md transition-all duration-500 ${
+                          isCurrent ? 'bg-rose-500 shadow-sm' : 'bg-rose-400 group-hover:bg-rose-500'
+                        }`}
                         style={{ height: `${heightExpense}%` }}
                       />
                     </div>
