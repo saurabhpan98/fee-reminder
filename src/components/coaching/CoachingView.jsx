@@ -1,7 +1,7 @@
 // src/components/coaching/CoachingView.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../firebase';
-import { collection, getDocs, addDoc, updateDoc, setDoc, doc, query, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, setDoc, doc, deleteDoc, query, where } from 'firebase/firestore';
 import { RemindersTab } from './RemindersTab';
 import { ExpensesTab } from './ExpensesTab';
 import { Edit3, Settings } from 'lucide-react';
@@ -10,7 +10,8 @@ import { AddTeacherModal } from './AddTeacherModal';
 import { 
   Plus, BookOpen, Bell, ArrowLeft, Search, X, 
   Layers, Bookmark, ChevronRight, AlertCircle, Users, Calendar, 
-  UserPlus, Receipt, Eye, EyeOff, Copy, Check, ShieldCheck
+  UserPlus, Receipt, Eye, EyeOff, Copy, Check, ShieldCheck, Trash2,
+  AlertTriangle, Loader2, Unlink, CheckCircle2
 } from 'lucide-react';
 
 export const CoachingView = ({ 
@@ -33,6 +34,24 @@ export const CoachingView = ({
   const [currentCoaching, setCurrentCoaching] = useState(coaching);
 
   const [showAddTeacherModal, setShowAddTeacherModal] = useState(false);
+
+  // Toast Notification State
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  // Custom Delete Entire Teacher Modal State
+  const [deleteTeacherModal, setDeleteTeacherModal] = useState({
+    isOpen: false,
+    teacher: null,
+    isProcessing: false
+  });
+
+  // Custom Unassign Specific Batch Modal State
+  const [unassignBatchModal, setUnassignBatchModal] = useState({
+    isOpen: false,
+    teacher: null,
+    batch: null,
+    isProcessing: false
+  });
 
   // Quick Action Dropdown (+ Button) State
   const [showQuickMenu, setShowQuickMenu] = useState(false);
@@ -63,6 +82,13 @@ export const CoachingView = ({
   const [newClassName, setNewClassName] = useState('');
   const [targetClassForSubject, setTargetClassForSubject] = useState('');
   const [subjectForm, setSubjectForm] = useState({ name: '', teacherName: '' });
+
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' });
+    }, 3500);
+  };
 
   // Close Quick Action Dropdown on click outside
   useEffect(() => {
@@ -149,11 +175,15 @@ export const CoachingView = ({
     const teachersSnap = await getDocs(
       query(
         collection(db, 'users'),
-        where('coachingId', '==', coaching.id),
         where('role', '==', 'staff_teacher')
       )
     );
-    const teacherList = teachersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const teacherList = teachersSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(t => 
+        t.status !== 'deleted' && 
+        (t.coachingId === coaching.id || t.assignedBatches?.some(b => b.coachingId === coaching.id))
+      );
     setTeachers(teacherList);
   };
 
@@ -213,6 +243,7 @@ export const CoachingView = ({
 
     setActiveFeeModal(null);
     fetchCoachingData();
+    showToast(`Fee status updated for ${student.name}`);
   };
 
   const handleAddClass = async (e) => {
@@ -226,6 +257,7 @@ export const CoachingView = ({
     setNewClassName('');
     setShowAddClassModal(false);
     fetchCoachingData();
+    showToast('New class added successfully!');
   };
 
   const handleAddSubject = async (e) => {
@@ -246,6 +278,74 @@ export const CoachingView = ({
     setSubjectForm({ name: '', teacherName: '' });
     setShowAddSubjectModal(false);
     fetchCoachingData();
+    showToast('New subject batch added successfully!');
+  };
+
+  // 1. Delete Entire Faculty Account Access (Pure Firestore Update - No Auth Interference)
+  const handleConfirmDeleteTeacher = async () => {
+    const teacher = deleteTeacherModal.teacher;
+    if (!teacher) return;
+
+    setDeleteTeacherModal(prev => ({ ...prev, isProcessing: true }));
+    try {
+      const userRef = doc(db, 'users', teacher.id || teacher.uid);
+      const remainingBatches = (teacher.assignedBatches || []).filter(b => b.coachingId !== coaching.id);
+
+      if (remainingBatches.length > 0) {
+        await updateDoc(userRef, {
+          assignedBatches: remainingBatches,
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        await updateDoc(userRef, {
+          status: 'deleted',
+          role: 'deleted_staff',
+          assignedBatches: [],
+          coachingId: null,
+          deletedAt: new Date().toISOString()
+        });
+      }
+
+      setDeleteTeacherModal({ isOpen: false, teacher: null, isProcessing: false });
+      fetchCoachingData();
+      showToast(`Faculty access revoked for ${teacher.name || teacher.email}`);
+    } catch (err) {
+      console.error("Error deleting teacher access:", err);
+      setDeleteTeacherModal(prev => ({ ...prev, isProcessing: false }));
+      showToast('Failed to delete teacher: ' + err.message, 'error');
+    }
+  };
+
+  // 2. Unassign Specific Batch from Faculty (Pure Firestore Update - No Auth Interference)
+  const handleConfirmUnassignBatch = async () => {
+    const { teacher, batch } = unassignBatchModal;
+    if (!teacher || !batch) return;
+
+    setUnassignBatchModal(prev => ({ ...prev, isProcessing: true }));
+    try {
+      const userRef = doc(db, 'users', teacher.id || teacher.uid);
+      const existingBatches = teacher.assignedBatches || [];
+
+      // Filter out only the selected batch
+      const updatedBatches = existingBatches.filter(b => 
+        !(b.coachingId === coaching.id && b.classId === batch.classId && b.subjectId === batch.subjectId)
+      );
+
+      await updateDoc(userRef, {
+        assignedBatches: updatedBatches,
+        assignedClassId: updatedBatches.length > 0 ? updatedBatches[0].classId : '',
+        assignedSubjectId: updatedBatches.length > 0 ? updatedBatches[0].subjectId : '',
+        updatedAt: new Date().toISOString()
+      });
+
+      setUnassignBatchModal({ isOpen: false, teacher: null, batch: null, isProcessing: false });
+      fetchCoachingData();
+      showToast(`Unassigned ${batch.className} (${batch.subjectName}) from ${teacher.name || 'faculty'}`);
+    } catch (err) {
+      console.error("Error unassigning batch:", err);
+      setUnassignBatchModal(prev => ({ ...prev, isProcessing: false }));
+      showToast('Failed to unassign batch: ' + err.message, 'error');
+    }
   };
 
   const togglePasswordVisibility = (teacherId) => {
@@ -259,6 +359,7 @@ export const CoachingView = ({
     const text = `TuitionManager Faculty Login\nEmail: ${email}\nPassword: ${password || 'Set at creation'}`;
     navigator.clipboard.writeText(text);
     setCopiedId(teacherId);
+    showToast('Credentials copied to clipboard!');
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -368,7 +469,26 @@ export const CoachingView = ({
   const totalSubjectsCount = classes.reduce((sum, c) => sum + (c.subjects?.length || 0), 0);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6 relative">
+      
+      {/* FLOATING TOAST NOTIFICATION */}
+      {toast.show && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300 pointer-events-none">
+          <div className={`px-4 py-3 rounded-2xl shadow-2xl border flex items-center gap-2.5 text-xs font-bold ${
+            toast.type === 'error'
+              ? 'bg-rose-900/95 text-white border-rose-700 shadow-rose-900/30'
+              : 'bg-slate-900/95 text-white border-slate-700 shadow-indigo-900/30'
+          }`}>
+            {toast.type === 'error' ? (
+              <AlertCircle size={16} className="text-rose-400 shrink-0" />
+            ) : (
+              <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+            )}
+            <span>{toast.message}</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <button
           onClick={onGoBack}
@@ -895,7 +1015,7 @@ export const CoachingView = ({
                 <ShieldCheck size={18} className="text-indigo-600" /> Faculty Credentials & Access Roster
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Manage subject teacher logins, passwords, and assigned classroom batch permissions
+                Manage subject teacher logins, passwords, assigned classroom batch permissions, or revoke staff access
               </p>
             </div>
 
@@ -913,7 +1033,7 @@ export const CoachingView = ({
                 <tr>
                   <th className="px-4 py-3.5 font-bold">Teacher Name</th>
                   <th className="px-4 py-3.5 font-bold">Login Email</th>
-                  <th className="px-4 py-3.5 font-bold">Assigned Classes & Subjects</th>
+                  <th className="px-4 py-3.5 font-bold">Assigned Classes & Subjects (Click × to Unassign)</th>
                   <th className="px-4 py-3.5 font-bold">Login Password</th>
                   <th className="px-4 py-3.5 font-bold text-right">Actions</th>
                 </tr>
@@ -925,10 +1045,12 @@ export const CoachingView = ({
                   // Multi-batch resolution
                   const teacherBatches = teacher.assignedBatches && teacher.assignedBatches.length > 0
                     ? teacher.assignedBatches.filter(b => b.coachingId === coaching.id)
-                    : [{
+                    : (teacher.assignedClassId ? [{
+                        classId: teacher.assignedClassId,
                         className: getClassNameById(teacher.assignedClassId),
+                        subjectId: teacher.assignedSubjectId,
                         subjectName: getSubjectNameById(teacher.assignedClassId, teacher.assignedSubjectId)
-                      }];
+                      }] : []);
 
                   return (
                     <tr key={teacher.id} className="hover:bg-slate-50/70 transition-colors">
@@ -946,13 +1068,36 @@ export const CoachingView = ({
                         {teacher.email}
                       </td>
 
+                      {/* Batches with Individual Unassign Option */}
                       <td className="px-4 py-3.5 font-bold text-slate-800">
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap gap-1.5 items-center">
                           {teacherBatches.map((b, bIdx) => (
-                            <span key={bIdx} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100 text-xs">
-                              {b.className} ({b.subjectName})
+                            <span 
+                              key={bIdx} 
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100 text-xs font-bold group/batch hover:bg-indigo-100/70 transition-colors"
+                            >
+                              <span>{b.className} ({b.subjectName})</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setUnassignBatchModal({
+                                    isOpen: true,
+                                    teacher,
+                                    batch: b,
+                                    isProcessing: false
+                                  });
+                                }}
+                                className="p-0.5 rounded-md hover:bg-rose-100 text-indigo-400 hover:text-rose-600 transition-all cursor-pointer"
+                                title={`Unassign ${b.className} - ${b.subjectName}`}
+                              >
+                                <X size={12} />
+                              </button>
                             </span>
                           ))}
+                          {teacherBatches.length === 0 && (
+                            <span className="text-xs text-slate-400 italic">No batches currently assigned</span>
+                          )}
                         </div>
                       </td>
 
@@ -971,10 +1116,11 @@ export const CoachingView = ({
                         </div>
                       </td>
 
-                      <td className="px-4 py-3.5 text-right">
+                      <td className="px-4 py-3.5 text-right space-x-1.5">
                         <button
                           onClick={() => handleCopyCredentials(teacher.email, teacher.password, teacher.id)}
                           className="px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-lg border border-slate-200 font-bold text-[11px] transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                          title="Copy Login Credentials"
                         >
                           {copiedId === teacher.id ? (
                             <>
@@ -987,6 +1133,15 @@ export const CoachingView = ({
                               <span>Copy Login</span>
                             </>
                           )}
+                        </button>
+
+                        {/* DELETE BUTTON: Opens Custom Modal */}
+                        <button
+                          onClick={() => setDeleteTeacherModal({ isOpen: true, teacher, isProcessing: false })}
+                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg border border-rose-200 transition-all inline-flex items-center cursor-pointer"
+                          title="Revoke Faculty Access"
+                        >
+                          <Trash2 size={13} />
                         </button>
                       </td>
                     </tr>
@@ -1157,6 +1312,104 @@ export const CoachingView = ({
         </div>
       )}
 
+      {/* 1. Custom Delete Entire Teacher Modal */}
+      {deleteTeacherModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-rose-100">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-100 rounded-2xl shrink-0">
+                <AlertTriangle size={22} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base">Delete Faculty Access?</h3>
+                <p className="text-[11px] text-slate-400 font-medium">Revoke teacher login & all batch permissions</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed bg-rose-50/60 p-3.5 rounded-2xl border border-rose-100">
+              Are you sure you want to delete access for <strong className="text-slate-900">{deleteTeacherModal.teacher?.name || deleteTeacherModal.teacher?.email}</strong>? 
+              They will no longer be able to log in or manage this coaching center's students.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteTeacherModal({ isOpen: false, teacher: null, isProcessing: false })}
+                disabled={deleteTeacherModal.isProcessing}
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteTeacher}
+                disabled={deleteTeacherModal.isProcessing}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {deleteTeacherModal.isProcessing ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" /> Deleting...
+                  </>
+                ) : (
+                  'Yes, Delete'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Custom Unassign Batch Confirmation Modal */}
+      {unassignBatchModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-amber-100">
+            <div className="flex items-center gap-3 text-amber-600">
+              <div className="p-3 bg-amber-100 rounded-2xl shrink-0">
+                <Unlink size={22} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base">Unassign Batch?</h3>
+                <p className="text-[11px] text-slate-400 font-medium">Remove specific classroom assignment</p>
+              </div>
+            </div>
+
+            <div className="text-xs text-slate-600 leading-relaxed bg-amber-50/70 p-3.5 rounded-2xl border border-amber-100 space-y-1.5">
+              <p>
+                Unassign <strong className="text-indigo-700 font-extrabold">{unassignBatchModal.batch?.className} ({unassignBatchModal.batch?.subjectName})</strong> from <strong className="text-slate-900">{unassignBatchModal.teacher?.name || unassignBatchModal.teacher?.email}</strong>?
+              </p>
+              <p className="text-[11px] text-slate-500">
+                This teacher will no longer see this batch in their faculty dashboard. Their login account and other assigned batches will remain active.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setUnassignBatchModal({ isOpen: false, teacher: null, batch: null, isProcessing: false })}
+                disabled={unassignBatchModal.isProcessing}
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmUnassignBatch}
+                disabled={unassignBatchModal.isProcessing}
+                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {unassignBatchModal.isProcessing ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" /> Unassigning...
+                  </>
+                ) : (
+                  'Yes, Unassign'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Coaching Details Modal */}
       <EditCoachingModal
         isOpen={showEditCoachingModal}
@@ -1167,6 +1420,7 @@ export const CoachingView = ({
           if (onUpdateState) {
             onUpdateState({ coaching: updated });
           }
+          showToast('Coaching details updated successfully!');
         }}
       />
 
@@ -1176,9 +1430,14 @@ export const CoachingView = ({
         onClose={() => setShowAddTeacherModal(false)}
         coaching={coaching}
         classes={classes || []}
-        onTeacherAdded={fetchCoachingData}
+        onTeacherAdded={() => {
+          fetchCoachingData();
+          showToast('Faculty updated successfully!');
+        }}
       />
 
     </div>
   );
 };
+
+export default CoachingView;

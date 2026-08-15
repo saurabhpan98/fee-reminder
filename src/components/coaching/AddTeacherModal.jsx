@@ -1,10 +1,18 @@
 // src/components/coaching/AddTeacherModal.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { db } from '../../firebase';
 import { doc, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { initializeApp, getApps, deleteApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { UserCheck, Lock, Mail, User, BookOpen, X, Loader2, CheckCircle2, Link2 } from 'lucide-react';
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  updatePassword, 
+  signOut,
+  setPersistence,
+  inMemoryPersistence 
+} from 'firebase/auth';
+import { UserCheck, Lock, Mail, User, BookOpen, X, Loader2, Link2 } from 'lucide-react';
 
 export const AddTeacherModal = ({ isOpen, onClose, coaching, classes = [], onTeacherAdded }) => {
   const [formData, setFormData] = useState({
@@ -22,7 +30,7 @@ export const AddTeacherModal = ({ isOpen, onClose, coaching, classes = [], onTea
 
   if (!isOpen) return null;
 
-  // Check if email already exists in users collection
+  // Real-time check on blur for UI visual feedback
   const handleEmailBlur = async () => {
     const cleanEmail = formData.email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
@@ -39,7 +47,6 @@ export const AddTeacherModal = ({ isOpen, onClose, coaching, classes = [], onTea
         const uDoc = snap.docs[0];
         const uData = { id: uDoc.id, ...uDoc.data() };
         setExistingUser(uData);
-        // Pre-fill Name & Phone if available
         setFormData(prev => ({
           ...prev,
           name: uData.name || prev.name,
@@ -62,6 +69,7 @@ export const AddTeacherModal = ({ isOpen, onClose, coaching, classes = [], onTea
       return;
     }
 
+    const cleanEmail = formData.email.trim().toLowerCase();
     const selectedClassObj = classes.find(c => c.id === formData.assignedClassId);
     const selectedSubjectObj = selectedClassObj?.subjects?.find(s => s.id === formData.assignedSubjectId);
 
@@ -77,17 +85,24 @@ export const AddTeacherModal = ({ isOpen, onClose, coaching, classes = [], onTea
 
     setLoading(true);
 
-    // -------------------------------------------------------------
-    // CASE A: EXISTING TEACHER (ATTACH NEW BATCH TO EXISTING ACCOUNT)
-    // -------------------------------------------------------------
-    if (existingUser) {
-      try {
-        const userRef = doc(db, 'users', existingUser.id || existingUser.uid);
-        const currentBatches = existingUser.assignedBatches || [];
+    try {
+      // 1. Direct Live Check in Firestore (Guarantees no false negatives on submit)
+      const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+      const snap = await getDocs(q);
+
+      // =========================================================================
+      // CASE A: EXISTING TEACHER -> ZERO AUTH CALLS (ONLY FIRESTORE BATCH UPDATE)
+      // =========================================================================
+      if (!snap.empty) {
+        const teacherDoc = snap.docs[0];
+        const teacherData = teacherDoc.data();
+        const currentBatches = teacherData.assignedBatches || [];
 
         // Check if already assigned to this exact batch
         const isDuplicate = currentBatches.some(
-          b => b.coachingId === coaching.id && b.classId === formData.assignedClassId && b.subjectId === formData.assignedSubjectId
+          b => b.coachingId === coaching.id && 
+               b.classId === formData.assignedClassId && 
+               b.subjectId === formData.assignedSubjectId
         );
 
         if (isDuplicate) {
@@ -98,85 +113,115 @@ export const AddTeacherModal = ({ isOpen, onClose, coaching, classes = [], onTea
 
         const updatedBatches = [...currentBatches, newBatchAssignment];
 
-        await updateDoc(userRef, {
+        // Only update Firestore document. NEVER TOUCH AUTH. Owner session stays 100% active.
+        await updateDoc(doc(db, 'users', teacherDoc.id), {
           role: 'staff_teacher',
+          status: 'active',
           assignedBatches: updatedBatches,
-          // Backward compatibility fallback fields
           assignedClassId: formData.assignedClassId,
           assignedSubjectId: formData.assignedSubjectId,
           coachingId: coaching.id,
           updatedAt: new Date().toISOString()
         });
 
-        alert(`Success! Batch "${selectedClassObj?.className} - ${selectedSubjectObj?.name}" has been attached to existing teacher account (${formData.email}).`);
+        alert(`Batch "${selectedClassObj?.className} - ${selectedSubjectObj?.name}" successfully attached to existing teacher (${cleanEmail}).`);
+        
         if (onTeacherAdded) onTeacherAdded();
         onClose();
-      } catch (err) {
-        console.error('Error attaching batch to existing teacher:', err);
-        alert('Failed to attach batch: ' + err.message);
+        return;
+      }
+
+      // =========================================================================
+      // CASE B: BRAND NEW TEACHER -> ISOLATED IN-MEMORY SECONDARY AUTH INSTANCE
+      // =========================================================================
+      let secondaryApp = null;
+      try {
+        const primaryApp = getApps()[0];
+        const secondaryAppName = `FacultyAuth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        
+        secondaryApp = initializeApp(primaryApp.options, secondaryAppName);
+        const secondaryAuth = getAuth(secondaryApp);
+
+        // Crucial: Set inMemoryPersistence so it never writes to browser localStorage/indexedDB
+        await setPersistence(secondaryAuth, inMemoryPersistence);
+
+        let uid = null;
+
+        try {
+          const cred = await createUserWithEmailAndPassword(
+            secondaryAuth,
+            cleanEmail,
+            formData.password
+          );
+          uid = cred.user.uid;
+        } catch (authErr) {
+          if (authErr.code === 'auth/email-already-in-use') {
+            const cred = await signInWithEmailAndPassword(
+              secondaryAuth,
+              cleanEmail,
+              formData.password
+            ).catch(() => null);
+
+            if (cred?.user) {
+              uid = cred.user.uid;
+              if (formData.password) {
+                await updatePassword(cred.user, formData.password).catch(() => {});
+              }
+            } else {
+              throw new Error("This email already exists in Authentication. Please enter the correct password for this account.");
+            }
+          } else {
+            throw authErr;
+          }
+        }
+
+        if (uid) {
+          // Write teacher document in Firestore
+          await setDoc(doc(db, 'users', uid), {
+            uid,
+            name: formData.name.trim(),
+            email: cleanEmail,
+            password: formData.password,
+            phone: formData.phone.trim() || 'N/A',
+            role: 'staff_teacher',
+            coachingId: coaching.id,
+            coachingName: coaching.name,
+            assignedBatches: [newBatchAssignment],
+            assignedClassId: formData.assignedClassId,
+            assignedSubjectId: formData.assignedSubjectId,
+            createdByOwnerId: coaching.teacherId || coaching.userId || '',
+            status: 'active',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+
+          // Explicitly sign out from temporary memory instance
+          await signOut(secondaryAuth);
+
+          alert(`Faculty account successfully created for "${formData.name}". Your owner session remains active.`);
+
+          setFormData({
+            name: '',
+            email: '',
+            password: '',
+            assignedClassId: '',
+            assignedSubjectId: '',
+            phone: ''
+          });
+
+          if (onTeacherAdded) onTeacherAdded();
+          onClose();
+        }
       } finally {
-        setLoading(false);
+        if (secondaryApp) {
+          await deleteApp(secondaryApp).catch(() => {});
+        }
       }
-      return;
-    }
 
-    // -------------------------------------------------------------
-    // CASE B: NEW TEACHER (CREATE ACCOUNT VIA SECONDARY INSTANCE)
-    // -------------------------------------------------------------
-    let secondaryApp = null;
-    try {
-      const primaryApp = getApps()[0];
-      const firebaseConfig = primaryApp.options;
-
-      const secondaryAppName = `SecondaryApp_${Date.now()}`;
-      secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
-      const secondaryAuth = getAuth(secondaryApp);
-
-      const cred = await createUserWithEmailAndPassword(
-        secondaryAuth,
-        formData.email.trim(),
-        formData.password
-      );
-
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        uid: cred.user.uid,
-        name: formData.name.trim(),
-        email: formData.email.trim().toLowerCase(),
-        password: formData.password, // Plain text ref for owner visibility
-        phone: formData.phone.trim() || 'N/A',
-        role: 'staff_teacher',
-        coachingId: coaching.id,
-        coachingName: coaching.name,
-        assignedBatches: [newBatchAssignment],
-        assignedClassId: formData.assignedClassId,
-        assignedSubjectId: formData.assignedSubjectId,
-        createdByOwnerId: coaching.teacherId || coaching.userId || '',
-        status: 'active',
-        createdAt: new Date().toISOString()
-      });
-
-      await signOut(secondaryAuth);
-
-      alert(`New Faculty account created successfully for "${formData.name}". Owner login remains active.`);
-
-      setFormData({
-        name: '',
-        email: '',
-        password: '',
-        assignedClassId: '',
-        assignedSubjectId: '',
-        phone: ''
-      });
-
-      if (onTeacherAdded) onTeacherAdded();
-      onClose();
     } catch (err) {
-      console.error('Error creating new teacher:', err);
-      alert('Failed to create teacher account: ' + err.message);
+      console.error('Error in handleSaveTeacher:', err);
+      alert('Failed: ' + err.message);
     } finally {
-      if (secondaryApp) {
-        await deleteApp(secondaryApp).catch(() => {});
-      }
       setLoading(false);
     }
   };
@@ -204,7 +249,7 @@ export const AddTeacherModal = ({ isOpen, onClose, coaching, classes = [], onTea
         </div>
 
         <form onSubmit={handleSaveTeacher} className="space-y-3.5">
-          {/* Email Address & Auto-Detection Status */}
+          {/* Email Address */}
           <div>
             <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Teacher Email Address</label>
             <div className="relative">
@@ -230,9 +275,9 @@ export const AddTeacherModal = ({ isOpen, onClose, coaching, classes = [], onTea
               <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-start gap-2">
                 <Link2 size={15} className="text-emerald-600 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-bold">Existing Account Found!</p>
+                  <p className="font-bold">Existing Faculty Account Detected</p>
                   <p className="text-[11px] text-emerald-700">
-                    This teacher already has login credentials. This class batch will simply be added to their existing account.
+                    This batch will be linked directly to their existing login ID without touching your current session.
                   </p>
                 </div>
               </div>
@@ -263,7 +308,7 @@ export const AddTeacherModal = ({ isOpen, onClose, coaching, classes = [], onTea
             </div>
           </div>
 
-          {/* Password only required if creating a NEW account */}
+          {/* Password field only when creating a new account */}
           {!existingUser && (
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Create Login Password</label>
@@ -279,7 +324,7 @@ export const AddTeacherModal = ({ isOpen, onClose, coaching, classes = [], onTea
             </div>
           )}
 
-          {/* Batch Assignment Dropdowns */}
+          {/* Class & Subject Dropdowns */}
           <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Assign Class</label>
@@ -344,3 +389,5 @@ export const AddTeacherModal = ({ isOpen, onClose, coaching, classes = [], onTea
     </div>
   );
 };
+
+export default AddTeacherModal;

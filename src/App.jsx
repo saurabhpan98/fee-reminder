@@ -691,21 +691,21 @@ export default function App() {
     );
   }
 
-  // View: Account Terminated
-  if (userData?.status === 'deleted') {
+  // View: Account Terminated / Access Revoked
+  if (!userData || userData?.status === 'deleted' || userData?.role === 'deleted_staff') {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center space-y-4 shadow-xl border border-rose-100">
           <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl mx-auto flex items-center justify-center">
             <ShieldAlert size={24} />
           </div>
-          <h2 className="text-xl font-extrabold text-slate-900">Account Terminated</h2>
+          <h2 className="text-xl font-extrabold text-slate-900">Access Revoked</h2>
           <p className="text-xs text-slate-600 leading-relaxed">
-            Your account has been deleted by the system administrator.
+            Your account access has been revoked or removed.
           </p>
           <button 
             onClick={handleLogout}
-            className="px-5 py-2.5 bg-slate-900 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
+            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all"
           >
             Sign Out
           </button>
