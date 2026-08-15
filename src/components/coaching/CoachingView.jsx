@@ -1,7 +1,7 @@
 // src/components/coaching/CoachingView.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../firebase';
-import { collection, getDocs, addDoc, updateDoc, setDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, setDoc, doc, query, where } from 'firebase/firestore';
 import { RemindersTab } from './RemindersTab';
 import { ExpensesTab } from './ExpensesTab';
 import { Edit3, Settings } from 'lucide-react';
@@ -10,7 +10,7 @@ import { AddTeacherModal } from './AddTeacherModal';
 import { 
   Plus, BookOpen, Bell, ArrowLeft, Search, X, 
   Layers, Bookmark, ChevronRight, AlertCircle, Users, Calendar, 
-  UserPlus, Receipt
+  UserPlus, Receipt, Eye, EyeOff, Copy, Check, ShieldCheck
 } from 'lucide-react';
 
 export const CoachingView = ({ 
@@ -23,7 +23,7 @@ export const CoachingView = ({
   onOpenStudentDetails, 
   onGoBack 
 }) => {
-  const [activeTab, setActiveTab] = useState(initialState.activeTab || 'roster'); // 'roster' | 'classes' | 'subjects' | 'reminders' | 'expenses'
+  const [activeTab, setActiveTab] = useState(initialState.activeTab || 'roster'); // 'roster' | 'classes' | 'subjects' | 'faculty' | 'reminders' | 'expenses'
   const [selectedClassId, setSelectedClassId] = useState(initialState.selectedClassId || '');
   const [selectedSubjectId, setSelectedSubjectId] = useState(initialState.selectedSubjectId || '');
   const [enrollmentStatusFilter, setEnrollmentStatusFilter] = useState(initialState.enrollmentStatusFilter || 'all');
@@ -49,6 +49,11 @@ export const CoachingView = ({
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [feeRecords, setFeeRecords] = useState({});
+  const [teachers, setTeachers] = useState([]);
+
+  // Faculty Tab Passwords and Copy State
+  const [visiblePasswords, setVisiblePasswords] = useState({});
+  const [copiedId, setCopiedId] = useState(null);
 
   // Synchronized Reminders Badge Count
   const [remindersCount, setRemindersCount] = useState(0);
@@ -139,6 +144,17 @@ export const CoachingView = ({
 
     const count = calculateCurrentRemindersCount(coachingStudents, feeSnap.docs);
     setRemindersCount(count);
+
+    // Fetch Faculty Staff Teachers
+    const teachersSnap = await getDocs(
+      query(
+        collection(db, 'users'),
+        where('coachingId', '==', coaching.id),
+        where('role', '==', 'staff_teacher')
+      )
+    );
+    const teacherList = teachersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    setTeachers(teacherList);
   };
 
   const handleClassChange = (classId) => {
@@ -230,6 +246,31 @@ export const CoachingView = ({
     setSubjectForm({ name: '', teacherName: '' });
     setShowAddSubjectModal(false);
     fetchCoachingData();
+  };
+
+  const togglePasswordVisibility = (teacherId) => {
+    setVisiblePasswords(prev => ({
+      ...prev,
+      [teacherId]: !prev[teacherId]
+    }));
+  };
+
+  const handleCopyCredentials = (email, password, teacherId) => {
+    const text = `TuitionManager Faculty Login\nEmail: ${email}\nPassword: ${password || 'Set at creation'}`;
+    navigator.clipboard.writeText(text);
+    setCopiedId(teacherId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const getClassNameById = (classId) => {
+    const cls = classes.find(c => c.id === classId);
+    return cls ? cls.className : 'Class';
+  };
+
+  const getSubjectNameById = (classId, subjectId) => {
+    const cls = classes.find(c => c.id === classId);
+    const sub = cls?.subjects?.find(s => s.id === subjectId);
+    return sub ? sub.name : 'Subject';
   };
 
   const selectedClass = classes.find(c => c.id === selectedClassId);
@@ -340,102 +381,106 @@ export const CoachingView = ({
       {/* Header Banner */}
       <div className="bg-white rounded-3xl border border-slate-200/70 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xs relative">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-800">{coaching.name}</h1>
-          <p className="text-xs text-slate-500 font-medium mt-1">Owner: {coaching.ownerName} | Location: {coaching.address} | UPI: {coaching.upi}</p>
+          <h1 className="text-2xl font-extrabold text-slate-800">{currentCoaching?.name || coaching.name}</h1>
+          <p className="text-xs text-slate-500 font-medium mt-1">
+            Owner: {currentCoaching?.ownerName || coaching.ownerName} | Location: {currentCoaching?.address || coaching.address} | UPI: {currentCoaching?.upiId || coaching.upi || 'N/A'}
+          </p>
         </div>
 
-        {/* NAYA: Add Staff Teacher Button */}
-        <button
-          onClick={() => setShowAddTeacherModal(true)}
-          className="p-2.5 ml-auto bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl border border-indigo-200 transition-all flex items-center gap-1.5 text-xs font-bold shadow-xs cursor-pointer"
-          title="Create Staff Teacher Login"
-        >
-          <UserPlus size={16} />
-          <span className="hidden sm:inline"></span>
-        </button>
-
-        {/* NAYA EDIT COACHING DETAILS BUTTON */}
-        <button
-          onClick={() => setShowEditCoachingModal(true)}
-          className="p-2.5 bg-slate-100 ml-auto hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-2xl border border-slate-200 transition-all flex items-center gap-1.5 text-xs font-bold shadow-xs cursor-pointer"
-          title="Edit Coaching Details"
-        >
-          <Edit3 size={16} />
-          <span className="hidden sm:inline"></span>
-        </button>
-
-        {/* Animated Plus Button Action */}
-        <div className="relative" ref={quickMenuRef}>
+        <div className="flex items-center gap-2 ml-auto">
+          {/* Add Staff Teacher Button */}
           <button
-            onClick={() => setShowQuickMenu(!showQuickMenu)}
-            className={`w-11 h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all duration-300 transform active:scale-95 cursor-pointer ${
-              showQuickMenu ? 'rotate-45 bg-slate-900 hover:bg-slate-800' : 'hover:scale-105'
-            }`}
-            title="Quick Options"
+            onClick={() => setShowAddTeacherModal(true)}
+            className="p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl border border-indigo-200 transition-all flex items-center gap-1.5 text-xs font-bold shadow-xs cursor-pointer"
+            title="Create Staff Teacher Login"
           >
-            <Plus size={16} className="transition-transform duration-300" />
+            <UserPlus size={16} />
+            <span className="hidden sm:inline">Add Teacher</span>
           </button>
 
-          {showQuickMenu && (
-            <div className="absolute right-0 mt-3 w-52 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/80 p-2 z-50 animate-in fade-in slide-in-from-top-3 duration-200 space-y-1">
-              <div className="px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1">
-                Quick Options
+          {/* Edit Coaching Details Button */}
+          <button
+            onClick={() => setShowEditCoachingModal(true)}
+            className="p-2.5 bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-2xl border border-slate-200 transition-all flex items-center gap-1.5 text-xs font-bold shadow-xs cursor-pointer"
+            title="Edit Coaching Details"
+          >
+            <Edit3 size={16} />
+            <span className="hidden sm:inline">Edit Details</span>
+          </button>
+
+          {/* Animated Plus Button Action */}
+          <div className="relative" ref={quickMenuRef}>
+            <button
+              onClick={() => setShowQuickMenu(!showQuickMenu)}
+              className={`w-11 h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all duration-300 transform active:scale-95 cursor-pointer ${
+                showQuickMenu ? 'rotate-45 bg-slate-900 hover:bg-slate-800' : 'hover:scale-105'
+              }`}
+              title="Quick Options"
+            >
+              <Plus size={16} className="transition-transform duration-300" />
+            </button>
+
+            {showQuickMenu && (
+              <div className="absolute right-0 mt-3 w-52 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/80 p-2 z-50 animate-in fade-in slide-in-from-top-3 duration-200 space-y-1">
+                <div className="px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1">
+                  Quick Options
+                </div>
+                
+                <button
+                  onClick={() => {
+                    setShowQuickMenu(false);
+                    setShowAddClassModal(true);
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-indigo-50/70 transition-all flex items-center gap-2.5 group cursor-pointer"
+                >
+                  <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                    <Layers size={15} />
+                  </div>
+                  <span>Add Class</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowQuickMenu(false);
+                    setTargetClassForSubject(classes[0]?.id || '');
+                    setShowAddSubjectModal(true);
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-indigo-50/70 transition-all flex items-center gap-2.5 group cursor-pointer"
+                >
+                  <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                    <Bookmark size={15} />
+                  </div>
+                  <span>Add Subject</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowQuickMenu(false);
+                    onOpenAddStudent();
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50/50 hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2.5 group cursor-pointer"
+                >
+                  <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-600 group-hover:bg-white/20 group-hover:text-white transition-colors">
+                    <UserPlus size={15} />
+                  </div>
+                  <span>Add Student</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowQuickMenu(false);
+                    handleTabChange('expenses');
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50/50 hover:bg-rose-600 hover:text-white transition-all flex items-center gap-2.5 group cursor-pointer"
+                >
+                  <div className="p-1.5 rounded-lg bg-rose-100 text-rose-600 group-hover:bg-white/20 group-hover:text-white transition-colors">
+                    <Receipt size={15} />
+                  </div>
+                  <span>Track Expenses</span>
+                </button>
               </div>
-              
-              <button
-                onClick={() => {
-                  setShowQuickMenu(false);
-                  setShowAddClassModal(true);
-                }}
-                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-indigo-50/70 transition-all flex items-center gap-2.5 group cursor-pointer"
-              >
-                <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
-                  <Layers size={15} />
-                </div>
-                <span>Add Class</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowQuickMenu(false);
-                  setTargetClassForSubject(classes[0]?.id || '');
-                  setShowAddSubjectModal(true);
-                }}
-                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:text-indigo-600 hover:bg-indigo-50/70 transition-all flex items-center gap-2.5 group cursor-pointer"
-              >
-                <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
-                  <Bookmark size={15} />
-                </div>
-                <span>Add Subject</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowQuickMenu(false);
-                  onOpenAddStudent();
-                }}
-                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50/50 hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2.5 group cursor-pointer"
-              >
-                <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-600 group-hover:bg-white/20 group-hover:text-white transition-colors">
-                  <UserPlus size={15} />
-                </div>
-                <span>Add Student</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowQuickMenu(false);
-                  handleTabChange('expenses');
-                }}
-                className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50/50 hover:bg-rose-600 hover:text-white transition-all flex items-center gap-2.5 group cursor-pointer"
-              >
-                <div className="p-1.5 rounded-lg bg-rose-100 text-rose-600 group-hover:bg-white/20 group-hover:text-white transition-colors">
-                  <Receipt size={15} />
-                </div>
-                <span>Track Expenses</span>
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -469,12 +514,12 @@ export const CoachingView = ({
         </button>
 
         <button
-          onClick={() => handleTabChange('subjects')}
+          onClick={() => handleTabChange('faculty')}
           className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer ${
-            activeTab === 'subjects' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-100'
+            activeTab === 'faculty' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-100'
           }`}
         >
-          <Bookmark size={16} /> Faculty
+          <UserPlus size={16} /> Faculty & Staff ({teachers.length})
         </button>
 
         <button
@@ -841,7 +886,132 @@ export const CoachingView = ({
         </div>
       )}
 
-      {/* TAB 4: REMINDERS TAB */}
+      {/* TAB 4: FACULTY & STAFF TAB */}
+      {activeTab === 'faculty' && (
+        <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-5">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <ShieldCheck size={18} className="text-indigo-600" /> Faculty Credentials & Access Roster
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Manage subject teacher logins, passwords, and assigned classroom batch permissions
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowAddTeacherModal(true)}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <UserPlus size={14} /> Add New Teacher
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
+                <tr>
+                  <th className="px-4 py-3.5 font-bold">Teacher Name</th>
+                  <th className="px-4 py-3.5 font-bold">Login Email</th>
+                  <th className="px-4 py-3.5 font-bold">Assigned Classes & Subjects</th>
+                  <th className="px-4 py-3.5 font-bold">Login Password</th>
+                  <th className="px-4 py-3.5 font-bold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                {teachers.map((teacher) => {
+                  const isPassVisible = visiblePasswords[teacher.id];
+
+                  // Multi-batch resolution
+                  const teacherBatches = teacher.assignedBatches && teacher.assignedBatches.length > 0
+                    ? teacher.assignedBatches.filter(b => b.coachingId === coaching.id)
+                    : [{
+                        className: getClassNameById(teacher.assignedClassId),
+                        subjectName: getSubjectNameById(teacher.assignedClassId, teacher.assignedSubjectId)
+                      }];
+
+                  return (
+                    <tr key={teacher.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="px-4 py-3.5 font-bold text-slate-900 flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-extrabold text-xs">
+                          {(teacher.name || 'T').charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-extrabold text-slate-900">{teacher.name || 'Faculty'}</p>
+                          <p className="text-[10px] text-slate-400">{teacher.phone || 'No phone logged'}</p>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3.5 text-slate-700 font-mono font-semibold">
+                        {teacher.email}
+                      </td>
+
+                      <td className="px-4 py-3.5 font-bold text-slate-800">
+                        <div className="flex flex-wrap gap-1.5">
+                          {teacherBatches.map((b, bIdx) => (
+                            <span key={bIdx} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100 text-xs">
+                              {b.className} ({b.subjectName})
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3.5 font-mono">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 bg-slate-100 rounded-lg text-slate-800 font-bold select-all">
+                            {isPassVisible ? (teacher.password || '••••••••') : '••••••••'}
+                          </span>
+                          <button
+                            onClick={() => togglePasswordVisibility(teacher.id)}
+                            className="p-1 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                            title={isPassVisible ? 'Hide Password' : 'Show Password'}
+                          >
+                            {isPassVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3.5 text-right">
+                        <button
+                          onClick={() => handleCopyCredentials(teacher.email, teacher.password, teacher.id)}
+                          className="px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-lg border border-slate-200 font-bold text-[11px] transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                        >
+                          {copiedId === teacher.id ? (
+                            <>
+                              <Check size={12} className="text-emerald-600" />
+                              <span className="text-emerald-600">Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={12} />
+                              <span>Copy Login</span>
+                            </>
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {teachers.length === 0 && (
+              <div className="p-8 text-center text-slate-400 text-xs font-medium space-y-2">
+                <UserPlus size={32} className="mx-auto text-slate-300" />
+                <p>No staff teachers registered yet for this coaching center.</p>
+                <button
+                  onClick={() => setShowAddTeacherModal(true)}
+                  className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-xs hover:bg-indigo-100 transition-all cursor-pointer"
+                >
+                  Create First Teacher Account
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: REMINDERS TAB */}
       {activeTab === 'reminders' && (
         <RemindersTab 
           coachingId={coaching.id} 
@@ -850,9 +1020,9 @@ export const CoachingView = ({
         />
       )}
 
-      {/* TAB 5: EXPENSES TAB */}
+      {/* TAB 6: EXPENSES TAB */}
       {activeTab === 'expenses' && (
-        <ExpensesTab coaching = {coaching} coachingId={coaching.id} />
+        <ExpensesTab coaching={coaching} coachingId={coaching.id} />
       )}
 
       {/* Quick Fee Modal */}
@@ -987,7 +1157,7 @@ export const CoachingView = ({
         </div>
       )}
 
-      {/* Modal Render at bottom */}
+      {/* Edit Coaching Details Modal */}
       <EditCoachingModal
         isOpen={showEditCoachingModal}
         onClose={() => setShowEditCoachingModal(false)}
@@ -1000,15 +1170,13 @@ export const CoachingView = ({
         }}
       />
 
-      {/* File ke bottom me Modal render karein */}
+      {/* Add Teacher Modal */}
       <AddTeacherModal
         isOpen={showAddTeacherModal}
         onClose={() => setShowAddTeacherModal(false)}
         coaching={coaching}
         classes={classes || []}
-        onTeacherAdded={() => {
-          alert("Faculty registered successfully!");
-        }}
+        onTeacherAdded={fetchCoachingData}
       />
 
     </div>

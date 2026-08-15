@@ -11,6 +11,7 @@ import { StudentDetailsPage } from './pages/StudentDetailsPage';
 import { ClassDetailsPage } from './pages/ClassDetailsPage';
 import SubjectDetailsPage from './pages/SubjectDetailsPage';
 import { UserPaymentsPage } from './pages/UserPaymentsPage';
+import { StaffTeacherDashboard } from './pages/StaffTeacherDashboard';
 import { CoachingView } from './components/coaching/CoachingView';
 import { TeacherDashboard } from './components/dashboard/TeacherDashboard';
 import { ChatModal } from './components/ChatModal';
@@ -22,7 +23,7 @@ import {
   LogOut, BookOpen, User, ChevronRight,
   Home, ArrowLeft, MessageSquare, ShieldAlert,
   Bell, CreditCard, MoreVertical, Shield, Calendar, Mail, Sparkles, CheckCircle2, Lock,
-  ShieldCheck, Phone, Download, QrCode, Search, Filter
+  ShieldCheck, Phone, Download, QrCode, Search
 } from 'lucide-react';
 import './App.css';
 
@@ -113,7 +114,7 @@ const ParentPortalView = ({ onBack }) => {
   const handleDownloadReceipt = async (student, enrollment, feeRecord) => {
     const amountPaid = Number(feeRecord?.amountPaid || 0);
     const monthlyFee = Number(enrollment.monthlyFee || 0);
-    const feeStatus = feeRecord?.status || (amountPaid >= monthlyFee ? 'paid' : amountPaid > 0 ? 'partially_paid' : 'unpaid');
+    const feeStatus = feeRecord?.status || (amountPaid >= monthlyFee && monthlyFee > 0 ? 'paid' : amountPaid > 0 ? 'partially_paid' : 'unpaid');
 
     await downloadPaymentReceiptPDF({
       coaching: student.coaching,
@@ -145,7 +146,7 @@ const ParentPortalView = ({ onBack }) => {
         <div className="flex items-center justify-between">
           <button
             onClick={onBack}
-            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-xs flex items-center gap-1.5 hover:bg-slate-50 transition-all"
+            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-xs flex items-center gap-1.5 hover:bg-slate-50 transition-all cursor-pointer"
           >
             <ArrowLeft size={16} /> Back to Home
           </button>
@@ -185,7 +186,7 @@ const ParentPortalView = ({ onBack }) => {
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer"
                 >
                   {MONTHS.map((m, idx) => (
                     <option key={idx} value={idx + 1}>{m}</option>
@@ -198,7 +199,7 @@ const ParentPortalView = ({ onBack }) => {
                 <select
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(Number(e.target.value))}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer"
                 >
                   {[CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1].map((yr) => (
                     <option key={yr} value={yr}>{yr}</option>
@@ -210,7 +211,7 @@ const ParentPortalView = ({ onBack }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Search size={15} /> {loading ? 'Searching Records...' : `Search Fee Details for ${monthName} ${selectedYear}`}
             </button>
@@ -296,103 +297,7 @@ const ParentPortalView = ({ onBack }) => {
 };
 
 // -------------------------------------------------------------
-// 2. STAFF / MULTI-TEACHER RESTRICTED DASHBOARD
-// -------------------------------------------------------------
-const StaffTeacherDashboard = ({ staffUser, onLogout }) => {
-  const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchAssignedStudents = async () => {
-      if (!staffUser?.coachingId) return;
-      const q = query(
-        collection(db, 'students'),
-        where('coachingId', '==', staffUser.coachingId)
-      );
-      const snap = await getDocs(q);
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const filtered = list.filter(s =>
-        s.enrollments?.some(e =>
-          (!staffUser.assignedClassId || e.classId === staffUser.assignedClassId) &&
-          (!staffUser.assignedSubjectId || e.subjectId === staffUser.assignedSubjectId)
-        )
-      );
-      setStudents(filtered);
-      setLoading(false);
-    };
-    fetchAssignedStudents();
-  }, [staffUser]);
-
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
-      <header className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center sticky top-0 z-40">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center font-bold">
-            <BookOpen size={18} />
-          </div>
-          <div>
-            <h1 className="text-sm font-extrabold">{staffUser.coachingName || 'Coaching Institute'}</h1>
-            <p className="text-[10px] text-slate-400 font-medium">Faculty Staff Panel: {staffUser.name}</p>
-          </div>
-        </div>
-        <button
-          onClick={onLogout}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
-        >
-          <LogOut size={14} /> Sign Out
-        </button>
-      </header>
-
-      <main className="max-w-6xl mx-auto p-6 space-y-6">
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
-          <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="text-base font-extrabold text-slate-900">My Assigned Class Students</h2>
-              <p className="text-xs text-slate-500">View roster & manage batch student fees (Restricted Faculty View)</p>
-            </div>
-            <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full font-extrabold text-xs">
-              {students.length} Students
-            </span>
-          </div>
-
-          {loading ? (
-            <div className="py-8 text-center text-xs text-slate-400">Loading student roster...</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-slate-50 border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
-                  <tr>
-                    <th className="px-4 py-3 font-bold">Student Name</th>
-                    <th className="px-4 py-3 font-bold">Contact</th>
-                    <th className="px-4 py-3 font-bold">Class & Subject</th>
-                    <th className="px-4 py-3 font-bold">Monthly Fee</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                  {students.map(s => (
-                    <tr key={s.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-bold text-slate-900">{s.name}</td>
-                      <td className="px-4 py-3 text-slate-600">{s.phone}</td>
-                      <td className="px-4 py-3 text-indigo-600 font-bold">
-                        {s.enrollments?.map(e => `${e.className} (${e.subjectName})`).join(', ')}
-                      </td>
-                      <td className="px-4 py-3 font-black text-slate-800">
-                        ₹{s.enrollments?.reduce((acc, curr) => acc + (curr.monthlyFee || 0), 0)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
-  );
-};
-
-// -------------------------------------------------------------
-// 3. USER PROFILE VIEW WITH UPI SETUP & PLAN STATUS
+// 2. USER PROFILE VIEW WITH UPI SETUP & PLAN STATUS
 // -------------------------------------------------------------
 const UserProfileView = ({ userData, currentUser, onBack, onOpenUpgradeModal }) => {
   const planConfig = getUserPlanConfig(userData);
@@ -556,7 +461,7 @@ const UserProfileView = ({ userData, currentUser, onBack, onOpenUpgradeModal }) 
 };
 
 // -------------------------------------------------------------
-// 4. MAIN CENTRAL APP ROUTER
+// 3. MAIN CENTRAL APP ROUTER
 // -------------------------------------------------------------
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -776,7 +681,7 @@ export default function App() {
     );
   }
 
-  // View: Staff Teacher Restricted User
+  // View: Staff Teacher Dedicated Dashboard
   if (userData?.role === 'staff_teacher') {
     return (
       <StaffTeacherDashboard
