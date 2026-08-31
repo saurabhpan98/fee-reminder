@@ -21,12 +21,12 @@ import {
 } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCJQ0my--nMpYmz703S9p-FrNueeod58GI",
-  authDomain: "fee-reminder-27524.firebaseapp.com",
-  projectId: "fee-reminder-27524",
-  storageBucket: "fee-reminder-27524.firebasestorage.app",
-  messagingSenderId: "591195430063",
-  appId: "1:591195430063:web:7c7905ed21db915a51485a"
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
 };
 
 const app = initializeApp(firebaseConfig);
